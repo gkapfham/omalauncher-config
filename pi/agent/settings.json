@@ -1,0 +1,9 @@
+{
+  "theme": "omarchy-system",
+  "lastChangelogVersion": "1.4.0",
+  "defaultProvider": "opencode-go",
+  "defaultModel": "deepseek-v4.1-flash",
+  "packages": [
+    "packages/pi-open-tui"
+  ]
+}

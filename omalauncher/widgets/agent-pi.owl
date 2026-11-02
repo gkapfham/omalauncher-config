@@ -1,0 +1,29 @@
+widget "pi" {
+  size: 6x6
+  minSize: 3x4
+  padding: 0
+
+  meta { owl: 16; description: "Pi in a terminal, with a swipe-typed prompt line below it, as Termux's" }
+
+  // The terminal's own keyboard field takes no suggestions, so the phone's glide typing does nothing in it. This
+  // widget's text field has them: the line you swipe there lands in the file PI_PROMPT_INBOX names, and the extension
+  // ~/.pi/agent/extensions/swipe-prompt.ts turns it into a user message, as if typed and sent. No tmux: Pi runs right
+  // in the tile, so a restart of it (or of the launcher) starts a new conversation; add --continue to the command to
+  // pick the last one up again.
+  Terminal { weight: 1; command: 'PI_PROMPT_INBOX=/tmp/pi-prompt pi' }
+
+  // A normal text field, over the keyboard: base64 keeps any quote, $ or backtick in what you swiped out of the
+  // shell's way, and writing a finished file over the inbox means the extension never reads half a prompt.
+  Box {
+    padding: [6, 3, 6, 4]
+    background: surface
+    Input {
+      placeholder: "swipe a prompt · ⏎ sends"
+      clear: true
+      underline: false
+      onSubmit: run(
+        "printf %s " + toBase64(value) + " | base64 -d > /tmp/pi-prompt.tmp && mv /tmp/pi-prompt.tmp /tmp/pi-prompt"
+      )
+    }
+  }
+}

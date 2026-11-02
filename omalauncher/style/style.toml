@@ -1,0 +1,26 @@
+# The launcher's style. The Style menu writes it too; settings left out have
+# their default, and defaults.toml next to this file lists them all.
+# Changes show on the phone within a second; errors.txt says what was ignored.
+
+version = 1
+theme = "vitamin"
+background = "image-1793586720734.png"
+font = "Maple Mono NF"
+
+[home]
+columns = 9
+
+[widgets]
+frost = true
+
+[icons]
+monochrome = true
+
+[corners]
+scale = 0.5
+
+[status-bar]
+shown = false
+
+[terminal]
+font = "Maple Mono NF:style=SemiBold"

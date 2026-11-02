@@ -1,0 +1,5 @@
+# The launcher's own copies, and machines' leavings.
+**/.stock-*
+**/.removed/
+*~
+.DS_Store

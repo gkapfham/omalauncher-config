@@ -1,0 +1,7 @@
+{
+  "$schema": "https://pi.dev/schemas/keybindings.schema.json",
+  "tui.altScreen.lineUp": ["alt+pageUp"],
+  "tui.altScreen.lineDown": ["alt+pageDown"],
+  "tui.altScreen.halfPageUp": ["ctrl+alt+up"],
+  "tui.altScreen.halfPageDown": ["ctrl+alt+down"]
+}

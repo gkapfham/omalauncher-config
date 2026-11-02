@@ -1,0 +1,32 @@
+mode = "dark"
+
+# The orange of the cursor in the ghostty config this came from.
+accent = "#d78700"
+selection = "#3d3d3d"
+muted = "#767676"
+
+background = "#1c1c1c"
+dark_background = "#171717"
+darker_background = "#111111"
+lighter_background = "#272727"
+
+foreground = "#d2d2d2"
+dark_foreground = "#767676"
+light_foreground = "#b2b2b2"
+bright_foreground = "#e6e6e6"
+
+red = "#d75f5f"
+yellow = "#b7b757"
+orange = "#d78700"
+green = "#6f9500"
+cyan = "#5f8787"
+blue = "#87afd7"
+magenta = "#a569a5"
+brown = "#875f5f"
+
+bright_red = "#e27a7a"
+bright_yellow = "#d0d070"
+bright_green = "#8ab400"
+bright_cyan = "#7ba3a3"
+bright_blue = "#a3c4e6"
+bright_magenta = "#bd83bd"
