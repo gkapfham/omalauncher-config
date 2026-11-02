@@ -1,11 +1,11 @@
 face "omarchy" {
   // A session in the Omarchy way: a bar, gaps, and tiled windows on the wallpaper.
   // Its windows have home's tile glass: widgets.opacity and frosted glass from settings › style.
-  // Workspace 1 is the desktop. 2 apps, 3 notifications, 4 agents.
+  // Workspace 1 is the desktop. 2 apps, 3 agents.
 
   meta {
     owl: 13
-    description: "An Omarchy session: a bar, tiled windows, fastfetch, notifications, and your apps"
+    description: "An Omarchy session: a bar, tiled windows, fastfetch, agents, and your apps"
     version: "1.0"
     license: "MIT"
     category: "system"
@@ -22,7 +22,6 @@ face "omarchy" {
   source bat = android.battery
   source modes = android.modes
   source m = android.media
-  source n = android.notifications
   source apps = android.apps
   source rec = android.recent
   source ag = android.agents
@@ -126,7 +125,7 @@ face "omarchy" {
     }
   }
 
-  component AppGrid(list, columns, iconSize) {
+  component AppGrid(list, columns, iconSize, names = true) {
     Grid {
       columns: columns
       gap: 14
@@ -136,7 +135,9 @@ face "omarchy" {
           align: center
           onTap: open(a.key)
           Image { src: a.icon; size: iconSize }
-          Text { text: lower(a.name); font: mono; fontSize: 11; align: center; maxLines: 1 }
+          if names {
+            Text { text: lower(a.name); font: mono; fontSize: 11; align: center; maxLines: 1 }
+          }
         }
       }
     }
@@ -161,54 +162,8 @@ face "omarchy" {
       Column {
         scroll: true
         weight: 1
-        AppGrid { list: full ? top.take(16) : sideApps.take(cols == null ? 10 : cols * 6); columns: cols ?? (full ? (wide ? 6 : 4) : 2); iconSize: full ? 52 : 44 }
-      }
-    }
-  }
-
-  component Notes() {
-    Column {
-      fill: true
-      gap: 8
-      padding: 12
-      background: glass
-      frost: tileFrost
-      border: 2
-      borderColor: accent
-      clip: true
-      Row {
-        align: center
-        Text { text: "notifications"; font: mono; fontSize: 12; color: muted; weight: 1 }
-        if n.available && n.count > 0 {
-          Text { text: "${n.count}"; font: mono; fontSize: 12; color: accent }
-        }
-      }
-      if !n.available {
-        Text { text: "allow notification access"; font: mono; fontSize: 14; color: accent; onTap: notification("open", "") }
-      } else if n.count == 0 {
-        Text { text: "all clear"; font: mono; fontSize: 14; color: muted }
-      } else {
-        Column {
-          scroll: true
-          weight: 1
-          gap: 2
-          for item in n.items.take(20) key item.key {
-            Row {
-              gap: 10
-              align: center
-              padding: [0, 6]
-              onTap: notification("open", item.key)
-              onLongPress: { haptic(); notification("dismiss", item.key) }
-              Image { src: item.icon; size: 28 }
-              Column {
-                gap: 0
-                weight: 1
-                Text { text: item.title; font: mono; fontSize: 13; maxLines: 1 }
-                Text { text: "${lower(item.app)} · ${fmtAgo(item.time, now)}"; font: mono; fontSize: 11; color: muted; maxLines: 1 }
-              }
-            }
-          }
-        }
+        // The recent list is icons only; the full apps view keeps their names.
+        AppGrid { list: full ? top.take(16) : sideApps.take(cols == null ? 10 : cols * 6); columns: cols ?? (full ? (wide ? 6 : 4) : 2); iconSize: full ? 52 : 44; names: full }
       }
     }
   }
@@ -283,7 +238,6 @@ face "omarchy" {
         Ws { n: 1 }
         Ws { n: 2 }
         Ws { n: 3 }
-        Ws { n: 4 }
       }
       Spacer { weight: 1 }
       Text { text: fmtTime(now, "EEE d  HH:mm"); font: mono; fontSize: 13; maxLines: 1 }
@@ -324,8 +278,6 @@ face "omarchy" {
         Desk { fill: true }
       } else if ws == 2 {
         Apps { full: true; fill: true }
-      } else if ws == 3 {
-        Notes { fill: true }
       } else {
         Agents { fill: true }
       }

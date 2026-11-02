@@ -34,7 +34,8 @@ SCRIPT = """
 const days = Number(%DAYS%);
 const calendars = workspace.service('calendar');
 const list = await calendars.calendarList.list({ maxResults: 250, fields: 'items(id,summary,backgroundColor,primary,selected,hidden,accessRole)' });
-const cals = (list.data.items || []).filter((c) => c.selected !== false && !c.hidden);
+// A calendar shared as free/busy only has no titles to show, just anonymous busy blocks, so skip it.
+const cals = (list.data.items || []).filter((c) => c.selected !== false && !c.hidden && c.accessRole !== 'freeBusyReader');
 const now = Date.now();
 const timeMin = new Date(now - 12 * 3600e3).toISOString();
 const timeMax = new Date(now + days * 86400e3).toISOString();
@@ -48,7 +49,7 @@ await Promise.all(
       singleEvents: true,
       orderBy: 'startTime',
       maxResults: 250,
-      fields: 'items(summary,start,end,location,transparency,status,attendeeOmitted,eventType)',
+      fields: 'items(summary,start,end,location,transparency,status,visibility,eventType)',
     });
     for (const e of res.data.items || []) {
       if (e.status === 'cancelled' || e.transparency === 'transparent') continue;
@@ -139,17 +140,21 @@ def fetch(email: str, days: int) -> dict:
         timeout=90,
     )
     out = proc.stdout.strip()
-    if proc.returncode != 0 or not out:
-        detail = (proc.stderr or proc.stdout).strip().splitlines()
-        message = next((line for line in reversed(detail) if line.strip()), "it printed nothing")
+    if not out:
+        detail = (proc.stderr or "").strip().splitlines()
+        die(next((line for line in reversed(detail) if line.strip()), "it printed nothing"), 1)
+    # The runner prints one JSON value, after any logs it collected: {ok, result} or {ok: false, error}.
+    try:
+        payload = json.loads(out[out.index("{"):])
+    except ValueError:
+        die("the runner printed something that isn't JSON:\n" + out[:400], 1)
+    if not payload.get("ok"):
+        error = payload.get("error") or {}
+        message = (error.get("message") if isinstance(error, dict) else str(error)) or "the runner failed without saying why"
         if "unauthorized" in message.lower() or "401" in message:
             message += f"\n  owl-agenda login --email {email}"
         die(message, 1)
-    # The runner prints one JSON value, after any logs it collected.
-    try:
-        return json.loads(out[out.index("{"):])
-    except ValueError:
-        die("the runner printed something that isn't JSON:\n" + out[:400], 1)
+    return payload.get("result") or {}
 
 
 def shape(data: dict) -> dict:

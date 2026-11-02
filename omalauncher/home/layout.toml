@@ -14,17 +14,13 @@ face = "market-face-simonschubert-omarchy.owl"
 
 [[page]]
 tiles = [
-  { widget = "10-today.owl", x = 0, y = 0, w = 9, h = 4 },
-  { widget = "market-reymarch995-now-playing.owl", x = 0, y = 4, w = 9, h = 4 },
-  { widget = "30-agenda.owl", x = 0, y = 8, w = 9, h = 6 },
+  { widget = "market-rat0sh1-quick-settings.owl", x = 0, y = 0, w = 9, h = 2 },
+  { widget = "30-agenda.owl", x = 0, y = 2, w = 9, h = 13 },
 ]
 
 [[page]]
 tiles = [
-  { widget = "agent-pi.owl", x = 0, y = 0, w = 9, h = 15 },
-]
-
-[[page]]
-tiles = [
-  { widget = "market-simonschubert-hacker-news.owl", x = 0, y = 0, w = 9, h = 15 },
+  { widget = "10-today.owl", x = 0, y = 0, w = 9, h = 5 },
+  { widget = "market-rcrohmana-storage.owl", x = 0, y = 5, w = 9, h = 7 },
+  { widget = "market-reymarch995-now-playing.owl", x = 0, y = 12, w = 9, h = 3 },
 ]

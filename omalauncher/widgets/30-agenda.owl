@@ -1,6 +1,7 @@
 widget "agenda" {
   size: 9x6
   minSize: 3x3
+  requires { pacman: ["python", "nodejs"] }
   padding: 12
 
   meta {
@@ -21,8 +22,12 @@ widget "agenda" {
   let events = ev.events ?? []
   let cals = ev.cals ?? []
   let failed = ev.error
-  // What fits: a day heading is 22, an event row 23, the heading 18.
-  let rows = clamp(int(((tileHeight ?? 460) - 46) / 23), 1, 20)
+  // What fits: 12 of padding top and bottom, the heading row 18, a day heading 22, an event row 23, and
+  // 16 for the "+N more" line when there are more events than fit. The tile can be any size.
+  let inner = (tileHeight ?? 460) - 24 - 18
+  let heights = scan(events, (h, e, i) => h + (i == 0 || events[i - 1].day != e.day ? 22 : 0) + 23, 0)
+  let fits = len(heights.filter(h => h <= inner))
+  let rows = clamp(fits < len(events) ? len(heights.filter(h => h <= inner - 16)) : fits, 1, 50)
   let shown = events.take(rows)
 
   // One event: the calendar's colour, its time, its name. Past ones, still listed today, dimmed.

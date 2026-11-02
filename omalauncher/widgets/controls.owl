@@ -2,12 +2,14 @@ panel "controls" {
   // A control center for swiping down on home: the phone's switches, the volume, what's playing, the next alarm and
   // the notifications. Pick it in settings › gestures, or set gestures.swipe-down = "controls.owl" in style.toml.
   // Like the drawer it's yours to change: ask your agent to edit it.
-  meta { description: "Swipe down for the phone's switches, volume, media, the next alarm and your notifications"; version: "1.0"; license: "MIT"; category: "system"; owl: 13 }
+  meta { description: "Swipe down for the phone's switches, volume, media, the next alarm and your notifications"; version: "1.0"; license: "MIT"; category: "system"; owl: 15 }
   asset gear = base64"PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNMTkuMTQsMTIuOTRjMC4wNCwtMC4zIDAuMDYsLTAuNjEgMC4wNiwtMC45NGMwLC0wLjMyIC0wLjAyLC0wLjY0IC0wLjA3LC0wLjk0bDIuMDMsLTEuNThjMC4xOCwtMC4xNCAwLjIzLC0wLjQxIDAuMTIsLTAuNjFsLTEuOTIsLTMuMzJjLTAuMTIsLTAuMjIgLTAuMzcsLTAuMjkgLTAuNTksLTAuMjJsLTIuMzksMC45NmMtMC41LC0wLjM4IC0xLjAzLC0wLjcgLTEuNjIsLTAuOTRMMTQuNCwyLjgxYy0wLjA0LC0wLjI0IC0wLjI0LC0wLjQxIC0wLjQ4LC0wLjQxaC0zLjg0Yy0wLjI0LDAgLTAuNDMsMC4xNyAtMC40NywwLjQxTDkuMjUsNS4zNUM4LjY2LDUuNTkgOC4xMiw1LjkyIDcuNjMsNi4yOUw1LjI0LDUuMzNjLTAuMjIsLTAuMDggLTAuNDcsMCAtMC41OSwwLjIyTDIuNzQsOC44N0MyLjYyLDkuMDggMi42Niw5LjM0IDIuODYsOS40OGwyLjAzLDEuNThDNC44NCwxMS4zNiA0LjgsMTEuNjkgNC44LDEyczAuMDIsMC42NCAwLjA3LDAuOTRsLTIuMDMsMS41OGMtMC4xOCwwLjE0IC0wLjIzLDAuNDEgLTAuMTIsMC42MWwxLjkyLDMuMzJjMC4xMiwwLjIyIDAuMzcsMC4yOSAwLjU5LDAuMjJsMi4zOSwtMC45NmMwLjUsMC4zOCAxLjAzLDAuNyAxLjYyLDAuOTRsMC4zNiwyLjU0YzAuMDUsMC4yNCAwLjI0LDAuNDEgMC40OCwwLjQxaDMuODRjMC4yNCwwIDAuNDQsLTAuMTcgMC40NywtMC40MWwwLjM2LC0yLjU0YzAuNTksLTAuMjQgMS4xMywtMC41NiAxLjYyLC0wLjk0bDIuMzksMC45NmMwLjIyLDAuMDggMC40NywwIDAuNTksLTAuMjJsMS45MiwtMy4zMmMwLjEyLC0wLjIyIDAuMDcsLTAuNDcgLTAuMTIsLTAuNjFMMTkuMTQsMTIuOTR6TTEyLDE1LjZjLTEuOTgsMCAtMy42LC0xLjYyIC0zLjYsLTMuNnMxLjYyLC0zLjYgMy42LC0zLjZzMy42LDEuNjIgMy42LDMuNlMxMy45OCwxNS42IDEyLDE1LjZ6Ii8+PC9zdmc+"
   source m = android.modes
   source v = android.volume
   source md = android.media
   source al = android.alarm
+  source bat = android.battery
+  source p = android.power every 2s
   // For the dot on the settings button while system updates wait, as the drawer shows it.
   source d = android.drawer
   source n = android.notifications
@@ -46,6 +48,7 @@ panel "controls" {
       {level: "none", name: "total silence", about: "nothing, alarms included"}
     ]
   let clearable = count(n.items ?? [], i => i.clearable)
+  let batColor = bat == null ? muted : bat.level <= 15 ? red : bat.level <= 30 ? yellow : green
   // What's playing, as the now playing widget shows it: art, the app with a live equalizer and drawn buttons.
   // Drawn, not glyphs: the launcher's icon font only carries weather symbols. Play/pause is a solid disc with the
   // glyph in the background color.
@@ -239,6 +242,77 @@ panel "controls" {
       }
     }
 
+    // Android's charging and battery status: the shade's ongoing battery notification, which notifications leave out.
+    Column {
+      fill: width
+      gap: 8
+      padding: [14, 12]
+      background: surface
+      radius: 8 * corners
+      Row {
+        align: center
+        Text { text: "battery"; style: label; weight: 1 }
+        Text {
+          text: bat == null ? null : bat.charging ? "charging" : lower(bat.status ?? (bat.plugged != null ? "plugged" : "on battery"))
+          style: small
+          color: bat != null && (bat.charging || bat.plugged != null) ? green : muted
+        }
+      }
+      Row {
+        align: center
+        gap: 12
+        Text {
+          text: bat == null ? "…" : "${bat.level}%"
+          fontSize: 28
+          color: bat == null ? muted : batColor
+        }
+        Column {
+          weight: 1
+          gap: 6
+          Progress { value: bat == null ? 0 : bat.level; color: batColor; track: alpha(foreground, 0.1); height: 6; fill: width }
+          Row {
+            gap: 12
+            if bat != null && bat.temp != null {
+              Text { text: fixed(bat.temp, 1) + "°C"; style: small; color: muted }
+            }
+            if p != null && p.watts != null {
+              Text { text: fixed(abs(p.watts), 1) + " W"; style: small; color: bat != null && bat.plugged != null ? green : muted }
+            }
+            if bat != null && bat.charging && p != null && p.chargeTime != null {
+              Text { text: fmtDuration(p.chargeTime) + " to full"; style: small; color: muted }
+            }
+            if bat != null && !bat.charging && p != null && p.current != null {
+              Text { text: fixed(abs(p.current), 0) + " mA"; style: small; color: muted }
+            }
+          }
+        }
+      }
+    }
+
+    // Brightness is readable by any app but not writable by the launcher, so this shows it and opens Android's settings.
+    Column {
+      fill: width
+      gap: 8
+      padding: [14, 12]
+      background: surface
+      radius: 8 * corners
+      onTap: { haptic(); settings("display") }
+      Row {
+        align: center
+        Text { text: "screen"; style: label; weight: 1 }
+        if m.autoBrightness {
+          Text { text: "auto"; style: small; color: accent }
+        }
+      }
+      Row {
+        align: center
+        gap: 10
+        Text { text: m.brightness == null ? "…" : "${m.brightness}%"; color: orange; width: 56 }
+        Progress { value: m.brightness ?? 0; color: accent; track: alpha(foreground, 0.1); height: 6; weight: 1 }
+      }
+      Text { text: "tap for Android's display settings"; style: small; color: muted }
+    }
+
     // Only while something plays or is paused in an app; without notification access there's nothing to show either.
     Column {
       visible: md.available == true && (md.title ?? "") != ""
@@ -294,7 +368,7 @@ panel "controls" {
       Spacer { height: 1; fill: width; background: border }
       // Without access, notification(...) opens the setting that grants it.
       Text { text: "[ allow notification access ]"; color: accent; onTap: notification("open", "") }
-    } else if (n.count ?? 0) > 0 || snoozedUntil > now {
+    } else {
       Spacer { height: 1; fill: width; background: border }
       Row {
         fill: width
@@ -304,6 +378,9 @@ panel "controls" {
         if snoozedUntil > now {
           Text { text: "back in " + (snoozeLeft >= 60 ? "1h" : "${snoozeLeft}m") + " "; color: muted }
           Text { text: "[ unsnooze ]"; color: accent; onTap: { haptic(); notification("unsnoozeAll"); snoozedUntil = 0 } }
+        } else if (n.count ?? 0) == 0 {
+          // Ongoing ones -- music, downloads, charging -- are never listed; the media card above shows the player.
+          Text { text: "none"; color: muted }
         } else {
           Text {
             text: "[ snooze 1h ]"

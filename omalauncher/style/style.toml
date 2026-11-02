@@ -9,6 +9,7 @@ font = "Maple Mono NF"
 
 [home]
 columns = 9
+single-page = true
 
 [widgets]
 opacity = 0.93
@@ -25,3 +26,7 @@ shown = false
 
 [terminal]
 font = "Maple Mono NF:style=SemiBold"
+
+[gestures]
+swipe-up = "drawer.owl"
+swipe-down = "controls.owl"

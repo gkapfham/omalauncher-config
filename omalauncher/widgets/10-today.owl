@@ -3,17 +3,25 @@ widget "today" {
   order: 1
   size: 3x3
   minSize: 2x2
-  meta { description: "The date and the weather where you are, by IP or a city you type. Tap it for the next 24 hours, three days, wind, UV, sun and moon. Tap °C or °F to switch"; version: "1.7"; license: "MIT"; category: "world"; owl: 16 }
+  meta { description: "The date and the weather where you are, by IP or a city you type. Tap it for the next 24 hours, three days, wind, UV, sun and moon. Tap °C or °F to switch"; version: "1.8"; license: "MIT"; category: "world"; owl: 16 }
 
-  // What it says, in the phone's language where it has a set. wttr names the sky and the moon in English, and
-  // its own Indonesian misses newer conditions, so other languages name them from wttr's codes.
+  // What it says, in the phone's language where it has a set. The sky comes from Open-Meteo's WMO code and the
+  // moon from its phase, named in each language here rather than by the API.
   strings {
     en {
       title: "weather"; loading: "weather…"; offline: "weather offline"; city: "city · empty = auto"
       feels: "feels"; humidity: "humidity"; rainToday: "rain today"; uv: "uv index"; pressure: "pressure"
       visibility: "visibility"; next24: "next 24 hours"; now: "now"; days: "3 days"; today: "today"
       sunrise: "sunrise"; sunset: "sunset"; moon: "moon"; kmh: "km/h"; yr: "open yr.no ↗"
-      sky: (code, desc) => lower(trim(desc))
+      sky: code => get({
+        "0": "clear", "1": "mainly clear", "2": "partly cloudy", "3": "overcast",
+        "45": "fog", "48": "freezing fog", "51": "light drizzle", "53": "drizzle",
+        "55": "heavy drizzle", "56": "freezing drizzle", "57": "heavy freezing drizzle", "61": "light rain",
+        "63": "rain", "65": "heavy rain", "66": "freezing rain", "67": "heavy freezing rain",
+        "71": "light snow", "73": "snow", "75": "heavy snow", "77": "snow grains",
+        "80": "light showers", "81": "showers", "82": "heavy showers", "85": "light snow showers",
+        "86": "snow showers", "95": "thunderstorm", "96": "thunderstorm with hail", "99": "heavy thunderstorm with hail"
+      }, code, "")
       wind: dir => "wind ${lower(dir)}"
       uvLevel: uv => uv >= 8 ? "very high" : uv >= 6 ? "high" : uv >= 3 ? "moderate" : "low"
       phase: (phase, lit) => "${lower(phase)} · ${lit}% lit"
@@ -23,21 +31,15 @@ widget "today" {
       feels: "terasa"; humidity: "kelembapan"; rainToday: "hujan hari ini"; uv: "indeks uv"; pressure: "tekanan"
       visibility: "jarak pandang"; next24: "24 jam ke depan"; now: "kini"; days: "3 hari"; today: "hari ini"
       sunrise: "terbit"; sunset: "terbenam"; moon: "bulan"; kmh: "km/jam"; yr: "buka yr.no ↗"
-      sky: (code, desc) => get({
-        "113": "cerah", "116": "cerah berawan", "119": "berawan", "122": "mendung", "143": "kabut tipis",
-        "176": "hujan lokal", "179": "salju lokal", "182": "hujan salju lokal", "185": "gerimis beku lokal",
-        "200": "badai petir", "227": "salju tertiup angin", "230": "badai salju", "248": "kabut", "260": "kabut beku",
-        "263": "gerimis ringan lokal", "266": "gerimis ringan", "281": "gerimis beku", "284": "gerimis beku lebat",
-        "293": "hujan ringan lokal", "296": "hujan ringan", "299": "kadang hujan sedang", "302": "hujan sedang",
-        "305": "kadang hujan lebat", "308": "hujan lebat", "311": "hujan beku ringan", "314": "hujan beku lebat",
-        "317": "hujan salju ringan", "320": "hujan salju lebat", "323": "salju ringan lokal", "326": "salju ringan",
-        "329": "salju sedang lokal", "332": "salju sedang", "335": "salju lebat lokal", "338": "salju lebat",
-        "350": "butiran es", "353": "hujan ringan sesaat", "356": "hujan lebat sesaat", "359": "hujan deras",
-        "362": "hujan salju ringan sesaat", "365": "hujan salju lebat sesaat", "368": "salju ringan sesaat",
-        "371": "salju lebat sesaat", "374": "butiran es ringan", "377": "butiran es lebat",
-        "386": "hujan ringan berpetir", "389": "hujan lebat berpetir", "392": "salju ringan berpetir",
-        "395": "salju lebat berpetir"
-      }, code, lower(trim(desc)))
+      sky: code => get({
+        "0": "cerah", "1": "cerah berawan", "2": "cerah berawan", "3": "mendung",
+        "45": "kabut", "48": "kabut beku", "51": "gerimis ringan", "53": "gerimis",
+        "55": "gerimis lebat", "56": "gerimis beku", "57": "gerimis beku lebat", "61": "hujan ringan",
+        "63": "hujan sedang", "65": "hujan lebat", "66": "hujan beku ringan", "67": "hujan beku lebat",
+        "71": "salju ringan", "73": "salju sedang", "75": "salju lebat", "77": "butiran salju",
+        "80": "hujan lokal", "81": "hujan sesaat", "82": "hujan deras sesaat", "85": "salju ringan sesaat",
+        "86": "salju lebat sesaat", "95": "badai petir", "96": "badai petir dengan hujan es", "99": "badai petir lebat dengan hujan es"
+      }, code, "")
       // Eight points: the sixteen's in-between ones go to the nearer of north, east, south and west.
       wind: dir => "angin " + get({
         "N": "utara", "NNE": "utara", "NE": "timur laut", "ENE": "timur", "E": "timur", "ESE": "timur",
@@ -56,21 +58,15 @@ widget "today" {
       feels: "sensación"; humidity: "humedad"; rainToday: "lluvia hoy"; uv: "índice uv"; pressure: "presión"
       visibility: "visibilidad"; next24: "próximas 24 horas"; now: "ahora"; days: "3 días"; today: "hoy"
       sunrise: "amanecer"; sunset: "atardecer"; moon: "luna"; kmh: "km/h"; yr: "abrir yr.no ↗"
-      sky: (code, desc) => get({
-        "113": "despejado", "116": "parcialmente nublado", "119": "nublado", "122": "cubierto", "143": "neblina",
-        "176": "lluvia dispersa", "179": "nieve dispersa", "182": "aguanieve dispersa", "185": "llovizna helada dispersa",
-        "200": "tormenta eléctrica", "227": "nieve con viento", "230": "ventisca", "248": "niebla", "260": "niebla helada",
-        "263": "llovizna ligera dispersa", "266": "llovizna ligera", "281": "llovizna helada", "284": "llovizna helada intensa",
-        "293": "lluvia ligera dispersa", "296": "lluvia ligera", "299": "a ratos lluvia moderada", "302": "lluvia moderada",
-        "305": "a ratos lluvia fuerte", "308": "lluvia fuerte", "311": "lluvia helada ligera", "314": "lluvia helada fuerte",
-        "317": "aguanieve ligera", "320": "aguanieve fuerte", "323": "nevada ligera dispersa", "326": "nevada ligera",
-        "329": "nevada moderada dispersa", "332": "nevada moderada", "335": "nevada fuerte dispersa", "338": "nevada fuerte",
-        "350": "granizo fino", "353": "chubascos ligeros", "356": "chubascos fuertes", "359": "aguacero",
-        "362": "chubascos de aguanieve ligeros", "365": "chubascos de aguanieve fuertes", "368": "chubascos de nieve ligeros",
-        "371": "chubascos de nieve fuertes", "374": "chubascos de granizo fino ligeros", "377": "chubascos de granizo fino fuertes",
-        "386": "lluvia ligera con truenos", "389": "lluvia fuerte con truenos", "392": "nieve ligera con truenos",
-        "395": "nieve fuerte con truenos"
-      }, code, lower(trim(desc)))
+      sky: code => get({
+        "0": "despejado", "1": "mayormente despejado", "2": "parcialmente nublado", "3": "cubierto",
+        "45": "niebla", "48": "niebla helada", "51": "llovizna ligera", "53": "llovizna",
+        "55": "llovizna fuerte", "56": "llovizna helada", "57": "llovizna helada fuerte", "61": "lluvia ligera",
+        "63": "lluvia moderada", "65": "lluvia fuerte", "66": "lluvia helada ligera", "67": "lluvia helada fuerte",
+        "71": "nevada ligera", "73": "nevada moderada", "75": "nevada fuerte", "77": "granos de nieve",
+        "80": "chubascos ligeros", "81": "chubascos", "82": "chubascos fuertes", "85": "chubascos de nieve ligeros",
+        "86": "chubascos de nieve fuertes", "95": "tormenta eléctrica", "96": "tormenta con granizo", "99": "tormenta fuerte con granizo"
+      }, code, "")
       // Eight points: the sixteen's in-between ones go to the nearer of north, east, south and west.
       wind: dir => "viento del " + get({
         "N": "norte", "NNE": "norte", "NE": "noreste", "ENE": "este", "E": "este", "ESE": "este",
@@ -89,21 +85,15 @@ widget "today" {
       feels: "sensação"; humidity: "umidade"; rainToday: "chuva hoje"; uv: "índice uv"; pressure: "pressão"
       visibility: "visibilidade"; next24: "próximas 24 horas"; now: "agora"; days: "3 dias"; today: "hoje"
       sunrise: "nascer do sol"; sunset: "pôr do sol"; moon: "lua"; kmh: "km/h"; yr: "abrir yr.no ↗"
-      sky: (code, desc) => get({
-        "113": "céu limpo", "116": "parcialmente nublado", "119": "nublado", "122": "encoberto", "143": "névoa",
-        "176": "chuva isolada", "179": "neve isolada", "182": "chuva com neve isolada", "185": "garoa congelante isolada",
-        "200": "trovoada", "227": "neve com vento", "230": "nevasca", "248": "neblina", "260": "neblina congelante",
-        "263": "garoa fraca isolada", "266": "garoa fraca", "281": "garoa congelante", "284": "garoa congelante forte",
-        "293": "chuva fraca isolada", "296": "chuva fraca", "299": "às vezes chuva moderada", "302": "chuva moderada",
-        "305": "às vezes chuva forte", "308": "chuva forte", "311": "chuva congelante fraca", "314": "chuva congelante forte",
-        "317": "chuva com neve fraca", "320": "chuva com neve forte", "323": "neve fraca isolada", "326": "neve fraca",
-        "329": "neve moderada isolada", "332": "neve moderada", "335": "neve forte isolada", "338": "neve forte",
-        "350": "granizo miúdo", "353": "pancadas de chuva fracas", "356": "pancadas de chuva fortes", "359": "aguaceiro",
-        "362": "pancadas de chuva com neve fracas", "365": "pancadas de chuva com neve fortes", "368": "pancadas de neve fracas",
-        "371": "pancadas de neve fortes", "374": "pancadas de granizo miúdo fracas", "377": "pancadas de granizo miúdo fortes",
-        "386": "chuva fraca com trovões", "389": "chuva forte com trovões", "392": "neve fraca com trovões",
-        "395": "neve forte com trovões"
-      }, code, lower(trim(desc)))
+      sky: code => get({
+        "0": "céu limpo", "1": "pouco nublado", "2": "parcialmente nublado", "3": "encoberto",
+        "45": "neblina", "48": "neblina congelante", "51": "garoa fraca", "53": "garoa",
+        "55": "garoa forte", "56": "garoa congelante", "57": "garoa congelante forte", "61": "chuva fraca",
+        "63": "chuva moderada", "65": "chuva forte", "66": "chuva congelante fraca", "67": "chuva congelante forte",
+        "71": "neve fraca", "73": "neve moderada", "75": "neve forte", "77": "grãos de neve",
+        "80": "pancadas de chuva fracas", "81": "pancadas de chuva", "82": "pancadas de chuva fortes", "85": "pancadas de neve fracas",
+        "86": "pancadas de neve fortes", "95": "trovoada", "96": "trovoada com granizo", "99": "trovoada forte com granizo"
+      }, code, "")
       // Eight points: the sixteen's in-between ones go to the nearer of north, east, south and west.
       wind: dir => "vento " + get({
         "N": "norte", "NNE": "norte", "NE": "nordeste", "ENE": "leste", "E": "leste", "ESE": "leste",
@@ -122,21 +112,15 @@ widget "today" {
       feels: "gefühlt"; humidity: "luftfeuchte"; rainToday: "regen heute"; uv: "uv-index"; pressure: "luftdruck"
       visibility: "sichtweite"; next24: "nächste 24 stunden"; now: "jetzt"; days: "3 tage"; today: "heute"
       sunrise: "aufgang"; sunset: "untergang"; moon: "mond"; kmh: "km/h"; yr: "yr.no öffnen ↗"
-      sky: (code, desc) => get({
-        "113": "klar", "116": "teils bewölkt", "119": "bewölkt", "122": "bedeckt", "143": "dunst",
-        "176": "örtlich regen", "179": "örtlich schnee", "182": "örtlich schneeregen", "185": "örtlich gefrierender niesel",
-        "200": "gewitter", "227": "schneetreiben", "230": "schneesturm", "248": "nebel", "260": "gefrierender nebel",
-        "263": "örtlich leichter niesel", "266": "leichter niesel", "281": "gefrierender niesel", "284": "starker gefrierender niesel",
-        "293": "örtlich leichter regen", "296": "leichter regen", "299": "zeitweise mäßiger regen", "302": "mäßiger regen",
-        "305": "zeitweise starker regen", "308": "starker regen", "311": "leichter gefrierender regen", "314": "starker gefrierender regen",
-        "317": "leichter schneeregen", "320": "starker schneeregen", "323": "örtlich leichter schnee", "326": "leichter schnee",
-        "329": "örtlich mäßiger schnee", "332": "mäßiger schnee", "335": "örtlich starker schnee", "338": "starker schnee",
-        "350": "eiskörner", "353": "leichte regenschauer", "356": "starke regenschauer", "359": "wolkenbruch",
-        "362": "leichte schneeregenschauer", "365": "starke schneeregenschauer", "368": "leichte schneeschauer",
-        "371": "starke schneeschauer", "374": "leichte eiskörnerschauer", "377": "starke eiskörnerschauer",
-        "386": "leichter regen mit gewitter", "389": "starker regen mit gewitter", "392": "leichter schnee mit gewitter",
-        "395": "starker schnee mit gewitter"
-      }, code, lower(trim(desc)))
+      sky: code => get({
+        "0": "klar", "1": "überwiegend klar", "2": "teils bewölkt", "3": "bedeckt",
+        "45": "nebel", "48": "gefrierender nebel", "51": "leichter niesel", "53": "niesel",
+        "55": "starker niesel", "56": "gefrierender niesel", "57": "starker gefrierender niesel", "61": "leichter regen",
+        "63": "regen", "65": "starker regen", "66": "gefrierender regen", "67": "starker gefrierender regen",
+        "71": "leichter schnee", "73": "schnee", "75": "starker schnee", "77": "schneegriesel",
+        "80": "leichte regenschauer", "81": "regenschauer", "82": "starke regenschauer", "85": "leichte schneeschauer",
+        "86": "schneeschauer", "95": "gewitter", "96": "gewitter mit hagel", "99": "starkes gewitter mit hagel"
+      }, code, "")
       // Eight points: the sixteen's in-between ones go to the nearer of north, east, south and west.
       wind: dir => get({
         "N": "nordwind", "NNE": "nordwind", "NE": "nordostwind", "ENE": "ostwind", "E": "ostwind", "ESE": "ostwind",
@@ -155,21 +139,15 @@ widget "today" {
       feels: "体感"; humidity: "湿度"; rainToday: "今日降水"; uv: "紫外线指数"; pressure: "气压"
       visibility: "能见度"; next24: "未来 24 小时"; now: "现在"; days: "未来 3 天"; today: "今天"
       sunrise: "日出"; sunset: "日落"; moon: "月亮"; kmh: "km/h"; yr: "打开 yr.no ↗"
-      sky: (code, desc) => get({
-        "113": "晴", "116": "局部多云", "119": "多云", "122": "阴", "143": "薄雾",
-        "176": "局部有雨", "179": "局部有雪", "182": "局部雨夹雪", "185": "局部冻毛毛雨",
-        "200": "雷暴", "227": "风吹雪", "230": "暴风雪", "248": "雾", "260": "冻雾",
-        "263": "局部小毛毛雨", "266": "小毛毛雨", "281": "冻毛毛雨", "284": "强冻毛毛雨",
-        "293": "局部小雨", "296": "小雨", "299": "间歇中雨", "302": "中雨",
-        "305": "间歇大雨", "308": "大雨", "311": "小冻雨", "314": "大冻雨",
-        "317": "小雨夹雪", "320": "大雨夹雪", "323": "局部小雪", "326": "小雪",
-        "329": "局部中雪", "332": "中雪", "335": "局部大雪", "338": "大雪",
-        "350": "冰粒", "353": "小阵雨", "356": "大阵雨", "359": "暴雨",
-        "362": "小阵雨夹雪", "365": "大阵雨夹雪", "368": "小阵雪",
-        "371": "大阵雪", "374": "小阵冰粒", "377": "大阵冰粒",
-        "386": "雷阵雨", "389": "强雷阵雨", "392": "小雷阵雪",
-        "395": "大雷阵雪"
-      }, code, lower(trim(desc)))
+      sky: code => get({
+        "0": "晴", "1": "大部晴朗", "2": "局部多云", "3": "阴",
+        "45": "雾", "48": "冻雾", "51": "小毛毛雨", "53": "毛毛雨",
+        "55": "强毛毛雨", "56": "冻毛毛雨", "57": "强冻毛毛雨", "61": "小雨",
+        "63": "中雨", "65": "大雨", "66": "冻雨", "67": "强冻雨",
+        "71": "小雪", "73": "中雪", "75": "大雪", "77": "米雪",
+        "80": "小阵雨", "81": "阵雨", "82": "强阵雨", "85": "小阵雪",
+        "86": "阵雪", "95": "雷暴", "96": "雷暴伴冰雹", "99": "强雷暴伴冰雹"
+      }, code, "")
       // Eight points: the sixteen's in-between ones go to the nearer of north, east, south and west.
       wind: dir => get({
         "N": "北风", "NNE": "北风", "NE": "东北风", "ENE": "东风", "E": "东风", "ESE": "东风",
@@ -195,40 +173,83 @@ widget "today" {
   state city = "" persist
   // Blank follows the country. A tap on the degree letter stores C or F.
   state unitChoice = "" persist
-  // The city, percent-encoded so "/", "?", "&" or "#" in it can't break the URL. Empty means located by IP.
-  let q = city.replace("%", "%25").replace("+", "%2B").replace("/", "%2F").replace("?", "%3F").replace("#", "%23").replace("&", "%26").replace("'", "%27").replace(" ", "+")
-  // One request. Icons and °F countries match omarchy's weather panel.
-  source wx = http("https://wttr.in/${q}?format=j1") every 30m timeout 10s json
-  let cur = wx.current_condition[0]
-  let day = wx.weather[0]
-  let area = wx.nearest_area[0]
-  let autoImperial = contains(["united states", "united states of america", "liberia", "myanmar", "burma"], lower(trim(area.country[0].value)))
+  // Blank follows the country: ipwho.is locates the phone by IP, otherwise Open-Meteo's geocoder finds the city.
+  let byIp = trim(city) == ""
+  // The city is a value in this URL, so it goes through enc(): "/", "?", "&" or "#" can't break it.
+  source ipGeo = http(byIp ? "https://ipwho.is/" : null) every 30m timeout 10s json
+  source cityGeo = http(byIp ? null : "https://geocoding-api.open-meteo.com/v1/search?name=${enc(trim(city))}&count=1&language=${enc(lang())}&format=json") every 30m timeout 10s json
+  let geo = byIp ? ipGeo : cityGeo
+  let where = geo == null ? null : byIp ? geo : geo.results[0]
+  let lat = where == null ? null : where.latitude
+  let lon = where == null ? null : where.longitude
+  let place = where == null ? null : (where.name ?? where.city)
+  let country = where == null ? null : where.country
+  let countryCode = (where == null ? "" : where.country_code) ?? ""
+  let autoImperial = contains(["US", "LR", "MM"], upper(countryCode))
   let imperial = unitChoice == "F" ? true : unitChoice == "C" ? false : autoImperial
   let unit = imperial ? "F" : "C"
-  let night = contains(cur.weatherIconUrl[0].value, "_night")
+  // One request, in the unit asked for, so the field names stay the same when °C/°F is tapped.
+  source wx = http(lat == null || lon == null ? null : "https://api.open-meteo.com/v1/forecast?latitude=${fixed(lat, 4)}&longitude=${fixed(lon, 4)}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,precipitation_probability,weather_code,is_day,uv_index,visibility&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum&timezone=auto&forecast_days=4&temperature_unit=${enc(imperial ? "fahrenheit" : "celsius")}&wind_speed_unit=${enc(imperial ? "mph" : "kmh")}&precipitation_unit=${enc(imperial ? "inch" : "mm")}") every 30m timeout 10s json status
+  let cur = wx == null || !wx.ok ? null : wx.out.current
+  let daily = wx == null || !wx.ok ? null : wx.out.daily
+  let hourly = wx == null || !wx.ok ? null : wx.out.hourly
+  let wxFailed = wx != null && !wx.ok
+  // The forecast's first hourly entry is today at 00:00, so the current hour is its index.
+  let hi = cur == null ? 0 : num(sub(cur.time, 11, 13))
+  let night = cur == null ? false : num(cur.is_day) == 0
+  let code = cur == null ? null : cur.weather_code
   // Clear or partly cloudy gets a warm sun or a cool moon; everything else stays neutral.
-  let sky = contains(["113", "116"], cur.weatherCode) ? (night ? blue : yellow) : foreground
-  // wttr gives "07:16 AM"; show 24-hour time.
-  let sun = [day.astronomy[0].sunrise, day.astronomy[0].sunset]
-    .map(s => match(s ?? "", "(\\d+):(\\d+) (AM|PM)"))
-    .map(m => m == null ? "" : pad(int(num(m[0]) % 12 + (m[2] == "PM" ? 12 : 0)), 2, "0") + ":" + m[1])
-  let sunHours = sun.map(s => num(sub(s, 0, 2)))
-  let hourNow = num(fmtTime(now, "H"))
-  // The next 24 hours in wttr's 3-hour steps, from today's and tomorrow's forecasts.
-  let steps = flatten(range(2).map(i => (wx.weather[i].hourly ?? []).map(h => {
-    hr: i * 24 + num(h.time) / 100,
-    t: num(get(h, "temp" + unit)),
-    rain: num(h.chanceofrain),
-    code: h.weatherCode
-  }))).filter(s => s.hr > hourNow - 3).take(8)
+  let sky = code == null ? foreground : code <= 2 ? (night ? blue : yellow) : foreground
+  // Sunrise and sunset come as the location's local time, "2026-11-02T07:04"; show 24-hour time.
+  let sun = daily == null ? ["", ""] : [daily.sunrise[0], daily.sunset[0]].map(t => t == null ? "" : sub(t, 11, 16))
+  // Wind comes in degrees; name it the way the languages' wind strings expect.
+  let dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+  let windDir = cur == null ? null : dirs[int((num(cur.wind_direction_10m) + 11.25) / 22.5) % 16]
+  // The next 24 hours in 3-hour steps from the current hour.
+  let steps = hourly == null ? [] : range(8).map(i => {
+    hr: num(sub(hourly.time[hi + i * 3], 11, 13)),
+    t: num(hourly.temperature_2m[hi + i * 3]),
+    rain: num(hourly.precipitation_probability[hi + i * 3]),
+    code: hourly.weather_code[hi + i * 3],
+    night: num(hourly.is_day[hi + i * 3]) == 0
+  })
   // The three days' range, so their bars share one scale.
-  let lowest = min((wx.weather ?? []).map(d => num(get(d, "mintemp" + unit))))
-  let highest = max((wx.weather ?? []).map(d => num(get(d, "maxtemp" + unit))))
+  let lowest = daily == null ? 0 : min(take(daily.temperature_2m_min, 3))
+  let highest = daily == null ? 0 : max(take(daily.temperature_2m_max, 3))
+  // Open-Meteo's WMO codes, as omarchy's weather glyphs, day and night.
+  let dayIcons = {
+    "0": "", "1": "", "2": "", "3": "",
+    "45": "", "48": "",
+    "51": "", "53": "", "55": "",
+    "56": "", "57": "",
+    "61": "", "63": "", "65": "",
+    "66": "", "67": "",
+    "71": "", "73": "", "75": "", "77": "",
+    "80": "", "81": "", "82": "",
+    "85": "", "86": "",
+    "95": "", "96": "", "99": ""
+  }
+  let nightIcons = {
+    "0": "", "1": "", "2": "", "3": "",
+    "45": "", "48": "",
+    "51": "", "53": "", "55": "",
+    "56": "", "57": "",
+    "61": "", "63": "", "65": "",
+    "66": "", "67": "",
+    "71": "", "73": "", "75": "", "77": "",
+    "80": "", "81": "", "82": "",
+    "85": "", "86": "",
+    "95": "", "96": "", "99": ""
+  }
   let moonIcons = {
     "New Moon": "", "Waxing Crescent": "", "First Quarter": "", "Waxing Gibbous": "",
     "Full Moon": "", "Waning Gibbous": "", "Last Quarter": "", "Waning Crescent": ""
   }
-  let uv = num(cur.uvIndex)
+  let uv = hourly == null ? 0 : num(hourly.uv_index[hi])
+  // The moon's age from a known new moon (2000-01-06 18:14 UTC), in its 29.53-day cycle.
+  let moonAge = ((now - 947182440) % 2551442.976) / 2551442.976
+  let moonLit = round((1 - cos(2 * 3.141592653589793 * moonAge)) / 2 * 100)
+  let moonPhase = moonAge < 0.0625 || moonAge >= 0.9375 ? "New Moon" : moonAge < 0.1875 ? "Waxing Crescent" : moonAge < 0.3125 ? "First Quarter" : moonAge < 0.4375 ? "Waxing Gibbous" : moonAge < 0.5625 ? "Full Moon" : moonAge < 0.6875 ? "Waning Gibbous" : moonAge < 0.8125 ? "Last Quarter" : "Waning Crescent"
 
   onTap: screen()
 
@@ -243,7 +264,7 @@ widget "today" {
       padding: [10, 8]
       border: 1
       borderColor: alpha(muted, 0.3)
-      Text { text: glyph; font: icon; fontSize: 22; color: tint; width: 28; align: center }
+      Text { text: glyph; font: icon; fontSize: 22; color: tint; width: 34; align: center }
       Column {
         gap: 0
         weight: 1
@@ -287,35 +308,35 @@ widget "today" {
       Row {
         gap: 6
         align: bottom
-        Text { text: weatherIcon(cur.weatherCode, night); font: icon; fontSize: 32; color: sky; width: 26; padding: [0, 0, 0, 3] }
-        Text { text: "${get(cur, "temp_" + unit)}°"; fontSize: 28; color: cyan; width: 68; maxLines: 1 }
+        Text { text: get(night ? nightIcons : dayIcons, "${int(code)}", ""); font: icon; fontSize: 32; color: sky; width: 26; padding: [0, 0, 0, 3] }
+        Text { text: "${round(num(cur.temperature_2m))}°"; fontSize: 28; color: cyan; width: 68; maxLines: 1 }
         if !narrow {
           Column {
             gap: 0
             weight: 1
-            Text { text: str.sky(cur.weatherCode, cur.weatherDesc[0].value); style: small; align: end; maxLines: 1 }
-            Text { text: "↑${get(day, "maxtemp" + unit)}° ↓${get(day, "mintemp" + unit)}°"; style: small; color: muted; align: end; maxLines: 1; padding: [0, 0, 0, 5] }
+            Text { text: str.sky("${int(code)}"); style: small; align: end; maxLines: 1 }
+            Text { text: "↑${round(num(daily.temperature_2m_max[0]))}° ↓${round(num(daily.temperature_2m_min[0]))}°"; style: small; color: muted; align: end; maxLines: 1; padding: [0, 0, 0, 5] }
           }
         }
       }
-      Text { text: "${str.feels} ${get(cur, "FeelsLike" + unit)}° · ${lower(area.areaName[0].value)}"; style: small; color: muted; maxLines: 1 }
+      Text { text: "${str.feels} ${round(num(cur.apparent_temperature))}° · ${lower(place)}"; style: small; color: muted; maxLines: 1 }
       if !low {
         Spacer { weight: 1 }
         Spacer { height: 1; fill: width; background: alpha(muted, 0.25) }
         Spacer { height: 8 }
-        // The next two days (icon from the noon reading), then sunrise and sunset.
+        // The next two days (icon from the day's own summary), then sunrise and sunset.
         // Each named from its own date: just after midnight, the forecast from before it still starts yesterday.
         Row {
           gap: 4
           align: center
-          for d, i in drop(wx.weather, 1) key d.date {
+          for i in take(drop(range(4), 1), 2) {
             Column {
               gap: 0
               weight: 1
               align: center
-              Text { text: lower(fmtTime(parseTime(d.date), "EEE")); style: label; color: muted; align: center }
-              Text { text: weatherIcon(d.hourly[4].weatherCode, false); font: icon; fontSize: 18; align: center }
-              Text { text: "${get(d, "maxtemp" + unit)}° ${get(d, "mintemp" + unit)}°"; style: small; align: center; maxLines: 1 }
+              Text { text: lower(fmtTime(parseTime(daily.time[i]), "EEE")); style: label; color: muted; align: center }
+              Text { text: get(dayIcons, "${int(daily.weather_code[i])}", ""); font: icon; fontSize: 18; align: center }
+              Text { text: "${round(num(daily.temperature_2m_max[i]))}° ${round(num(daily.temperature_2m_min[i]))}°"; style: small; align: center; maxLines: 1 }
             }
           }
           if !narrow {
@@ -325,13 +346,13 @@ widget "today" {
               Row {
                 gap: 4
                 align: center
-                Text { text: ""; font: icon; fontSize: 14; color: yellow; width: 20 }
+                Text { text: ""; font: icon; fontSize: 14; color: yellow; width: 28 }
                 Text { text: sun[0]; style: small; maxLines: 1; weight: 1 }
               }
               Row {
                 gap: 4
                 align: center
-                Text { text: ""; font: icon; fontSize: 14; color: orange; width: 20 }
+                Text { text: ""; font: icon; fontSize: 14; color: orange; width: 28 }
                 Text { text: sun[1]; style: small; maxLines: 1; weight: 1 }
               }
             }
@@ -339,7 +360,7 @@ widget "today" {
         }
       }
     } else {
-      Text { text: wx == null ? str.loading : str.offline; style: small; color: muted }
+      Text { text: (lat == null && geo != null) || wxFailed ? str.offline : str.loading; style: small; color: muted }
     }
   }
 
@@ -351,7 +372,7 @@ widget "today" {
       onSubmit: { city = trim(value); refresh() }
     }
     if cur == null {
-      Text { text: wx == null ? str.loading : str.offline; style: body; color: muted }
+      Text { text: (lat == null && geo != null) || wxFailed ? str.offline : str.loading; style: body; color: muted }
     } else {
       Column {
         scroll: true
@@ -360,22 +381,22 @@ widget "today" {
         Row {
           gap: 16
           align: center
-          Text { text: weatherIcon(cur.weatherCode, night); font: icon; fontSize: 64; color: sky; width: 80; align: center }
+          Text { text: get(night ? nightIcons : dayIcons, "${int(code)}", ""); font: icon; fontSize: 64; color: sky; width: 80; align: center }
           Column {
             gap: 0
             weight: 1
             Text {
-              text: "${get(cur, "temp_" + unit)}°${unit}"
+              text: "${round(num(cur.temperature_2m))}°${unit}"
               fontSize: 44
               color: cyan
               maxLines: 1
               onTap: unitChoice = unit == "C" ? "F" : "C"
             }
-            Text { text: str.sky(cur.weatherCode, cur.weatherDesc[0].value); style: body; maxLines: 2 }
+            Text { text: str.sky("${int(code)}"); style: body; maxLines: 2 }
           }
         }
         Text {
-          text: "${str.feels} ${get(cur, "FeelsLike" + unit)}° · ↑${get(day, "maxtemp" + unit)}° ↓${get(day, "mintemp" + unit)}° · ${lower(area.areaName[0].value)}, ${lower(area.country[0].value)}"
+          text: "${str.feels} ${round(num(cur.apparent_temperature))}° · ↑${round(num(daily.temperature_2m_max[0]))}° ↓${round(num(daily.temperature_2m_min[0]))}° · ${lower(place)}, ${lower(country)}"
           style: small
           color: muted
         }
@@ -383,12 +404,12 @@ widget "today" {
         Grid {
           columns: 2
           gap: 8
-          Stat { glyph: ""; label: str.wind(cur.winddir16Point); value: imperial ? "${cur.windspeedMiles} mph" : "${cur.windspeedKmph} ${str.kmh}"; tint: cyan }
-          Stat { glyph: ""; label: str.humidity; value: "${cur.humidity}%"; tint: blue }
-          Stat { glyph: ""; label: str.rainToday; value: "${max(day.hourly.map(h => num(h.chanceofrain)))}% · ${imperial ? cur.precipInches + " in" : cur.precipMM + " mm"}"; tint: blue }
-          Stat { glyph: ""; label: str.uv; value: "${uv} ${str.uvLevel(uv)}"; tint: uv >= 6 ? red : uv >= 3 ? yellow : green }
-          Stat { glyph: ""; label: str.pressure; value: imperial ? "${cur.pressureInches} inHg" : "${cur.pressure} hPa" }
-          Stat { glyph: ""; label: str.visibility; value: imperial ? "${cur.visibilityMiles} mi" : "${cur.visibility} km" }
+          Stat { glyph: ""; label: str.wind(windDir); value: "${round(num(cur.wind_speed_10m))} ${imperial ? "mph" : str.kmh}"; tint: cyan }
+          Stat { glyph: ""; label: str.humidity; value: "${round(num(cur.relative_humidity_2m))}%"; tint: blue }
+          Stat { glyph: ""; label: str.rainToday; value: "${round(num(daily.precipitation_probability_max[0]))}% · ${fixed(num(daily.precipitation_sum[0]), 1)} ${imperial ? "in" : "mm"}"; tint: blue }
+          Stat { glyph: ""; label: str.uv; value: "${round(uv)} ${str.uvLevel(uv)}"; tint: uv >= 6 ? red : uv >= 3 ? yellow : green }
+          Stat { glyph: ""; label: str.pressure; value: imperial ? "${fixed(num(cur.pressure_msl) * 0.02953, 2)} inHg" : "${round(num(cur.pressure_msl))} hPa" }
+          Stat { glyph: ""; label: str.visibility; value: imperial ? "${fixed(num(hourly.visibility[hi]) / 1609.344, 1)} mi" : "${fixed(num(hourly.visibility[hi]) / 1000, 1)} km" }
         }
         Rule { }
         // The next 24 hours: time, icon and rain chance per step, with the temperature curve under them.
@@ -397,13 +418,13 @@ widget "today" {
           gap: 4
           Row {
             gap: 0
-            for s in steps key s.hr {
+            for s, i in steps key s.hr {
               Column {
                 gap: 2
                 weight: 1
                 align: center
-                Text { text: s.hr == hourNow - hourNow % 3 ? str.now : pad(s.hr % 24, 2, "0"); style: label; color: muted; align: center }
-                Text { text: weatherIcon(s.code, s.hr % 24 < sunHours[0] || s.hr % 24 >= sunHours[1]); font: icon; fontSize: 20; align: center }
+                Text { text: i == 0 ? str.now : pad(s.hr, 2, "0"); style: label; color: muted; align: center }
+                Text { text: get(s.night ? nightIcons : dayIcons, "${int(s.code)}", ""); font: icon; fontSize: 20; align: center }
               }
             }
           }
@@ -419,7 +440,7 @@ widget "today" {
             path(range(n).map(i => [xs[i], ys[i]]), stroke: accent, width: 2)
             for s, i in steps {
               circle(xs[i], ys[i], 3, fill: accent)
-              text("${s.t}°", xs[i], ys[i] - 13, size: 12, align: center, color: foreground)
+              text("${round(s.t)}°", xs[i], ys[i] - 13, size: 12, align: center, color: foreground)
               rect(xs[i] - 10, height - 12, 20, 4, radius: 2, fill: alpha(muted, 0.2))
               rect(xs[i] - 10, height - 12, 20 * s.rain / 100, 4, radius: 2, fill: blue)
               text("${s.rain}%", xs[i], height - 24, size: 10, align: center, color: s.rain >= 30 ? blue : muted)
@@ -429,15 +450,15 @@ widget "today" {
         Rule { }
         // Three days: icon, rain chance and the day's low to high on a shared scale.
         Text { text: str.days; style: label; color: accent }
-        for d, i in wx.weather key d.date {
-          let lo = num(get(d, "mintemp" + unit))
-          let hi = num(get(d, "maxtemp" + unit))
+        for i in range(3) {
+          let lo = round(num(daily.temperature_2m_min[i]))
+          let hi = round(num(daily.temperature_2m_max[i]))
           Row {
             gap: 8
             align: center
-            Text { text: d.date == fmtTime(now, "yyyy-MM-dd") ? str.today : lower(fmtTime(parseTime(d.date), "EEE")); style: body; width: 64; maxLines: 1 }
-            Text { text: weatherIcon(d.hourly[4].weatherCode, false); font: icon; fontSize: 20; width: 26; align: center }
-            Text { text: "${max(d.hourly.map(h => num(h.chanceofrain)))}%"; style: small; color: blue; width: 40; align: end; maxLines: 1 }
+            Text { text: i == 0 ? str.today : lower(fmtTime(parseTime(daily.time[i]), "EEE")); style: body; width: 64; maxLines: 1 }
+            Text { text: get(dayIcons, "${int(daily.weather_code[i])}", ""); font: icon; fontSize: 20; width: 26; align: center }
+            Text { text: "${round(num(daily.precipitation_probability_max[i]))}%"; style: small; color: blue; width: 40; align: end; maxLines: 1 }
             Text { text: "${lo}°"; style: small; color: muted; width: 36; align: end; maxLines: 1 }
             Canvas {
               height: 6
@@ -459,15 +480,15 @@ widget "today" {
           Stat { glyph: ""; label: str.sunset; value: sun[1]; tint: orange; weight: 1 }
         }
         Stat {
-          glyph: get(moonIcons, day.astronomy[0].moon_phase, "")
+          glyph: get(moonIcons, moonPhase, "")
           label: str.moon
-          value: str.phase(day.astronomy[0].moon_phase, day.astronomy[0].moon_illumination)
+          value: str.phase(moonPhase, moonLit)
           tint: foreground
         }
-        // yr.no (Norwegian Meteorological Institute): ad-free and worldwide, opened at wttr's coordinates.
+        // yr.no (Norwegian Meteorological Institute): ad-free and worldwide, opened at the forecast's coordinates.
         Row {
           justify: end
-          Button { text: str.yr; color: muted; onTap: url("https://www.yr.no/en/forecast/daily-table/${area.latitude},${area.longitude}") }
+          Button { text: str.yr; color: muted; onTap: url("https://www.yr.no/en/forecast/daily-table/${fixed(lat, 4)},${fixed(lon, 4)}") }
         }
       }
     }

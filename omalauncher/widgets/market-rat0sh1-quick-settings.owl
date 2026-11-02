@@ -1,0 +1,66 @@
+widget "quick settings" {
+  // Quick settings in Omarchy's style: Wi-Fi, mobile data, flashlight, media, Do Not Disturb and btop in one row
+  // on square tiles, set in JetBrains Mono. Wi-Fi, data and Do Not Disturb come from Android itself, so no adb.
+
+  meta { owl: 13; description: "Compact Omarchy-style quick settings in one row: Wi-Fi, mobile data, flashlight, media, Do Not Disturb and btop. Reads the phone's radios directly, no adb"; version: "2.0"; license: "MIT"; category: "system" }
+  requires { pacman: ["btop"] }
+
+  size: 8x2
+  minSize: 6x2
+
+  source v = android.volume
+  source m = android.modes
+  source sim = android.sim
+
+  let jb = "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/JetBrainsMono%5Bwght%5D.ttf"
+  let nf = "https://raw.githubusercontent.com/ryanoasis/nerd-fonts/master/patched-fonts/NerdFontsSymbolsOnly/SymbolsNerdFontMono-Regular.ttf"
+
+  let primary = accent
+  let onPrimary = background
+  let containerHigh = alpha(foreground, 0.07)
+  let outline = alpha(foreground, 0.12)
+  let dim = mix(muted, foreground, 0.45)
+  // The carrier's first word keeps the data tile's note short enough to fit.
+  let dataNote = !sim.data ? "off" : lower(words(sim.carrier ?? "on")[0])
+
+  component Ic(g, sz = 22, tint = foreground) {
+    Text { text: g; font: nf; fontSize: sz; color: tint; maxLines: 1; align: center }
+  }
+
+  // A quick-settings tile: outlined, filled with the accent while on.
+  component Tile(g, label, note, on = false) {
+    Column {
+      gap: 1
+      align: center
+      justify: center
+      fill: true
+      padding: [6, 2]
+      background: on ? primary : containerHigh
+      border: 1
+      borderColor: on ? primary : outline
+      radius: 0
+      animate background: tween(200ms, "ease")
+      Ic { g: g; sz: 18; tint: on ? onPrimary : foreground }
+      Text { text: label; font: jb; fontSize: 10; fontWeight: 600; color: on ? onPrimary : foreground; maxLines: 1; align: center }
+      Text { text: note ?? "…"; font: jb; fontSize: 8; color: on ? alpha(onPrimary, 0.75) : dim; maxLines: 1; align: center }
+    }
+  }
+
+  Column {
+    gap: 6
+    fill: true
+    Row {
+      gap: 4
+      fill: true
+      // Android lets a launcher read the radios but not switch them, so a tap opens Android's own panel.
+      Box { weight: 1; fill: height; onTap: { haptic(); settings("wifi") }; Tile { g: m.wifi ? "󰖩" : "󰖪"; label: "wi-fi"; note: m.wifi ? "on" : "off"; on: m.wifi ?? false } }
+      Box { weight: 1; fill: height; onTap: { haptic(); settings("data") }; Tile { g: sim.data ? "󰒢" : "󰞃"; label: "data"; note: dataNote; on: sim.data ?? false } }
+      if m.torch != null {
+        Box { weight: 1; fill: height; onTap: { haptic(); torch("toggle") }; Tile { g: m.torch ? "󰉄" : "󰉅"; label: "torch"; note: m.torch ? "on" : "off"; on: m.torch } }
+      }
+      Box { weight: 1; fill: height; onTap: volume("toggle"); Tile { g: v.muted ? "󰖁" : "󰕾"; label: "media"; note: v.muted ? "muted" : "${v.level}%"; on: !v.muted } }
+      Box { weight: 1; fill: height; onTap: { haptic(); dnd("toggle") }; Tile { g: m.dnd ? "󰍶" : "󰍷"; label: "dnd"; note: m.dnd ? (m.dndAllows ?? "on") : (m.ringer ?? "off"); on: m.dnd } }
+      Box { weight: 1; fill: height; onTap: terminal("btop"); Tile { g: "󰐰"; label: "btop"; note: "monitor" } }
+    }
+  }
+}
