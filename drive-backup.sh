@@ -16,8 +16,8 @@ stamp=$(date '+%Y%m%d-%H%M%S')
 out="${TMPDIR:-/tmp}/omalauncher-config-$stamp.tar.gz"
 trap 'rm -f "$out"' EXIT
 
-# The whole repository, history and all. Secrets are already left out by save.sh.
-tar -C "$HOME" -czf "$out" omalauncher-config
+# The whole repository at HEAD, as a clean tree (no .git; the local repository keeps the history).
+git archive --format=tar.gz --prefix=omalauncher-config/ -o "$out" HEAD
 
 email=${OWL_AGENDA_ACCOUNT:-$(node "$HOME/.pi/agent/skills/google-workspace/scripts/auth.js" accounts 2>/dev/null | sed -n 's/^- email: //p' | head -1)}
 if [ -z "$email" ]; then
