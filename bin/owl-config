@@ -134,18 +134,30 @@ def save(message):
 
 
 def restore(wanted, dry_run=False):
-    write_status("restoring", "finding the backup…")
+    # A dry run is a check, not a backup: leave the status the app shows alone.
+    def note(state, message, **extra):
+        if not dry_run:
+            write_status(state, message, **extra)
+
+    note("restoring", "finding the backup…")
     try:
         backups = list_backups()
     except Exception as error:  # noqa: BLE001
-        write_status("error", str(error))
+        if dry_run:
+            print(str(error), file=sys.stderr)
+        else:
+            write_status("error", str(error))
         return 1
     target = find_backup(backups, wanted)
     if target is None:
-        write_status("error", f"no backup named {wanted}")
+        message = f"no backup named {wanted}"
+        if dry_run:
+            print(message, file=sys.stderr)
+        else:
+            write_status("error", message)
         return 1
 
-    write_status("restoring", f"downloading {target['name']}…", link=target.get("link"), name=target["name"])
+    note("restoring", f"downloading {target['name']}…", link=target.get("link"), name=target["name"])
     try:
         with tempfile.TemporaryDirectory(prefix="owl-config-") as folder:
             archive = Path(folder) / target["name"]
@@ -168,7 +180,7 @@ def restore(wanted, dry_run=False):
                 raise RuntimeError("the backup has no restore.sh")
 
             if dry_run:
-                write_status("ok", f"checked {target['name']}; nothing was changed")
+                print(f"checked {target['name']}; nothing was changed")
                 return 0
 
             write_status("restoring", f"applying {target['name']}…", link=target.get("link"), name=target["name"])
@@ -176,7 +188,10 @@ def restore(wanted, dry_run=False):
             if done.returncode != 0:
                 raise RuntimeError(last_line(done.stderr) or last_line(done.stdout) or "restore.sh failed")
     except Exception as error:  # noqa: BLE001
-        write_status("error", str(error))
+        if dry_run:
+            print(str(error), file=sys.stderr)
+        else:
+            write_status("error", str(error))
         return 1
 
     write_status(
