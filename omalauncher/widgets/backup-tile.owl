@@ -1,0 +1,164 @@
+widget "backup" {
+  // A home tile for backups: tap back up to save and upload, tap the tile for the saved setups.
+  page: 3
+  order: 9
+  size: 3x3
+  minSize: 3x2
+
+  meta {
+    owl: 17
+    description: "Back up the widgets, style and home layout to Google Drive, and restore a saved setup"
+    version: "1.0"
+    license: "MIT"
+    category: "system"
+  }
+
+  requires { pacman: ["python", "nodejs", "git", "util-linux"] }
+
+  source st = file("~/.cache/owl-config/status.json") json
+  source bl = file("~/.cache/owl-config/backups.json") json
+  source now = clock every 1m
+
+  state confirm = ""
+
+  let busy = st != null && (st.state == "saving" || st.state == "restoring")
+  let stateColor = st == null ? muted : st.state == "error" ? red : st.state == "ok" ? green : yellow
+  let last = len(bl ?? []) > 0 ? bl[0] : null
+
+  // First open with no cached list (a new install): fetch it once.
+  on bl first {
+    if len(bl ?? []) == 0 {
+      run("setsid -f $HOME/.local/bin/owl-config list >/dev/null 2>&1 </dev/null")
+    }
+  }
+
+  onTap: screen()
+
+  Column {
+    fill: true
+    gap: 4
+    Row {
+      Text { text: "backup"; style: muted; weight: 1 }
+      Text { text: st == null ? "ready" : st.state; style: small; color: stateColor }
+    }
+    if last != null {
+      Text { text: fmtTime(last.at, "d MMM"); maxLines: 1 }
+      Text { text: fmtTime(last.at, "HH:mm") + " · " + fmtBytes(last.size); style: small; color: muted; maxLines: 1 }
+    } else {
+      Text { text: "no backups yet"; style: small; color: muted }
+    }
+    Spacer { weight: 1 }
+    Button {
+      text: busy ? "working…" : "back up"
+      color: busy ? muted : accent
+      onTap: {
+        if !busy {
+          run("setsid -f $HOME/.local/bin/owl-config save >/dev/null 2>&1 </dev/null")
+        }
+      }
+    }
+  }
+
+  screen {
+    title: "backup"
+    Column {
+      fill: true
+      gap: 10
+      padding: [12, 0, 12, 12]
+
+      Row {
+        gap: 8
+        Button {
+          text: busy ? (st.state == "saving" ? "backing up…" : "restoring…") : "back up now"
+          color: busy ? muted : accent
+          weight: 1
+          onTap: {
+            if !busy {
+              run("setsid -f $HOME/.local/bin/owl-config save >/dev/null 2>&1 </dev/null")
+            }
+          }
+        }
+        Button {
+          text: "refresh list"
+          weight: 1
+          onTap: run("setsid -f $HOME/.local/bin/owl-config list >/dev/null 2>&1 </dev/null")
+        }
+      }
+
+      Column {
+        fill: width
+        gap: 6
+        padding: [12, 10]
+        background: surface
+        radius: 8 * corners
+        Row {
+          align: center
+          gap: 8
+          Text { text: st == null ? "ready" : st.state; color: stateColor; weight: 1 }
+          if st != null {
+            Text { text: fmtAgo(st.at, now); style: small; color: muted }
+          }
+        }
+        Text { text: st == null ? "no backup has run from here yet" : st.message; style: small; color: muted; maxLines: 3 }
+        if st != null && st.link != null {
+          Text { text: "open in Drive"; color: accent; style: small; onTap: url(st.link) }
+        }
+      }
+
+      Text { text: "saved setups"; style: label }
+
+      Column {
+        scroll: true
+        weight: 1
+        gap: 2
+        if len(bl ?? []) == 0 {
+          Text { text: "nothing in Drive yet — tap back up now"; style: small; color: muted; padding: [0, 4] }
+        }
+        for b in bl ?? [] key b.id {
+          Row {
+            fill: width
+            gap: 10
+            align: center
+            padding: [8, 4]
+            Text { text: fmtTime(b.at, "EEE d MMM  HH:mm"); weight: 1; maxLines: 1 }
+            Text { text: fmtBytes(b.size); style: small; color: muted }
+            Button { text: "restore"; color: red; onTap: confirm = b.id }
+          }
+        }
+      }
+
+      Text {
+        text: "restoring sets the current setup aside first, under ~/.local/share/omalauncher-restored."
+        style: small
+        color: muted
+      }
+
+      Popup {
+        visible: confirm != ""
+        onDismiss: confirm = ""
+        width: (screenWidth ?? 400) - 48
+        gap: 10
+        padding: [16, 14]
+        Text { text: "restore this setup?"; style: title }
+        Text {
+          text: "The current widgets, style and layout are set aside first, so this can be undone by hand."
+          style: small
+          color: muted
+        }
+        Row {
+          gap: 8
+          Button { text: "cancel"; weight: 1; onTap: confirm = "" }
+          Button {
+            text: "restore"
+            color: red
+            weight: 1
+            onTap: {
+              run("setsid -f $HOME/.local/bin/owl-config restore ${sh(confirm)} >/dev/null 2>&1 </dev/null")
+              confirm = ""
+            }
+          }
+        }
+      }
+    }
+  }
+}

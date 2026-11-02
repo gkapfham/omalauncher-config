@@ -53,6 +53,9 @@ To restore, download the newest `.tar.gz` from Drive, extract it in `~` (it expa
 run went, and lists the Drive backups newest first, each with **restore**. Restore asks first, and the current setup is set
 aside under `~/.local/share/omalauncher-restored/` before anything is replaced.
 
+`backup-tile.owl` puts it on home: a 3×3 tile with the last backup and a **back up** button; tap the tile for the same
+saved-setups list and restore buttons.
+
 The same thing from a terminal:
 
 ```sh
