@@ -29,6 +29,26 @@ Deliberately **not** saved: `pi/agent/auth.json` (your API keys), `pi/agent/sess
 
 It copies, commits and pushes in one go. Nothing to do when nothing changed; it says so and stops.
 
+## Backing up to Google Drive
+
+The phone is already signed in to Google for the agenda, so the backup can leave the phone without setting up GitHub:
+
+```sh
+~/omalauncher-config/drive-backup.sh                # dated message
+~/omalauncher-config/drive-backup.sh "new keybar"   # or your own
+```
+
+It saves as above, packs the repository at `HEAD` into `omalauncher-config-YYYYmmdd-HHMMSS.tar.gz`, and uploads it to
+Google Drive → **omalauncher-backups**, keeping the newest 10. Set `OWL_AGENDA_ACCOUNT` to use another signed-in Google
+account.
+
+To restore, download the newest `.tar.gz` from Drive, extract it in `~` (it expands to `~/omalauncher-config/`), then run
+`~/omalauncher-config/restore.sh`. The archive holds no tokens or API keys; sign in again with
+`owl-agenda login --email you@example.com` if the agenda needs it.
+
+**Not in any backup:** widget `persist` state and `secret` values (the launcher keeps those in its Android app data, not
+in files), Google tokens, and fonts. Re-enter secrets and sign in again on a new phone.
+
 ## Restoring
 
 ```sh
