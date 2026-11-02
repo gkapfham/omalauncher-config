@@ -40,6 +40,12 @@ done
 if [ -d "$pi"/themes ]; then cp -Rp "$pi"/themes/. pi/agent/themes/; fi
 if [ -f "$HOME"/AGENTS.md ]; then cp -p "$HOME"/AGENTS.md .; fi
 
+# owl-agenda, the calendar CLI, and the pi skill it asks Google through. Not the skill's node_modules (220 MB);
+# restore.sh installs those again with npm.
+mkdir -p bin pi/agent/skills
+if [ -f "$HOME"/.local/bin/owl-agenda ]; then cp -p "$HOME"/.local/bin/owl-agenda bin/; fi
+if [ -d "$pi"/skills ]; then tar -C "$pi"/skills --exclude=node_modules -cf - . | tar -C pi/agent/skills -xf -; fi
+
 git add -A
 if git diff --cached --quiet; then
   echo "Nothing has changed since the last save."

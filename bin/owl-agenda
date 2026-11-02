@@ -1,0 +1,272 @@
+#!/usr/bin/env python3
+"""owl-agenda — your Google Calendar, for omalauncher widgets and for the terminal.
+
+The data comes from the pi google-workspace skill's OAuth scripts (`~/.pi/agent/skills/google-workspace`): this
+doesn't need pi running, just that skill installed and one account signed in.
+
+    owl-agenda                  the next week, for a terminal
+    owl-agenda 14               two weeks
+    owl-agenda json [--days N]  JSON, which 30-agenda.owl reads
+    owl-agenda accounts         who is signed in
+    owl-agenda login [--email]  sign one in (opens the browser)
+    owl-agenda whoami
+
+Where it looks, in order: --email, $OWL_AGENDA_ACCOUNT, `email=` in ~/.config/owl-agenda/config, the one account
+signed in. `days=` in that config sets the default span, so a widget needs no arguments.
+"""
+
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.parse
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+SKILL = Path(os.environ.get("GOOGLE_WORKSPACE_SKILL_DIR", Path.home() / ".pi/agent/skills/google-workspace"))
+TOKENS = Path(os.environ.get("GOOGLE_WORKSPACE_TOKENS_DIR", Path.home() / ".pi/google-workspace/tokens"))
+CONFIG = Path(os.environ.get("OWL_AGENDA_CONFIG", Path.home() / ".config/owl-agenda/config"))
+NODE = os.environ.get("OWL_AGENDA_NODE") or "node"
+
+# What the widget reads, and what `owl-agenda json` prints: flat events, each with the calendar it came from.
+SCRIPT = """
+const days = Number(%DAYS%);
+const calendars = workspace.service('calendar');
+const list = await calendars.calendarList.list({ maxResults: 250, fields: 'items(id,summary,backgroundColor,primary,selected,hidden,accessRole)' });
+const cals = (list.data.items || []).filter((c) => c.selected !== false && !c.hidden);
+const now = Date.now();
+const timeMin = new Date(now - 12 * 3600e3).toISOString();
+const timeMax = new Date(now + days * 86400e3).toISOString();
+const events = [];
+await Promise.all(
+  cals.map(async (cal, i) => {
+    const res = await calendars.events.list({
+      calendarId: cal.id,
+      timeMin,
+      timeMax,
+      singleEvents: true,
+      orderBy: 'startTime',
+      maxResults: 250,
+      fields: 'items(summary,start,end,location,transparency,status,attendeeOmitted,eventType)',
+    });
+    for (const e of res.data.items || []) {
+      if (e.status === 'cancelled' || e.transparency === 'transparent') continue;
+      if (e.eventType && e.eventType !== 'default' && e.eventType !== 'fromGmail') continue;
+      const allDay = Boolean(e.start && e.start.date);
+      const start = allDay ? Date.parse(e.start.date + 'T00:00:00') : Date.parse(e.start.dateTime);
+      const end = allDay ? Date.parse(e.end.date + 'T00:00:00') : Date.parse(e.end.dateTime);
+      if (!Number.isFinite(start)) continue;
+      events.push({
+        s: Math.round(start / 1000),
+        e: Math.round((Number.isFinite(end) ? end : start + 1800e3) / 1000),
+        all: allDay,
+        t: e.summary || '(no title)',
+        loc: e.location || '',
+        ci: i,
+      });
+    }
+  }),
+);
+events.sort((a, b) => a.s - b.s || a.t.localeCompare(b.t));
+return {
+  at: Math.round(now / 1000),
+  cals: cals.map((c) => ({ n: c.summary || 'calendar', c: c.backgroundColor || null, primary: Boolean(c.primary) })),
+  events,
+};
+"""
+
+
+def die(message, code=1):
+    print(message, file=sys.stderr)
+    sys.exit(code)
+
+
+def config() -> dict:
+    values = {}
+    try:
+        for line in CONFIG.read_text().splitlines():
+            line = line.split("#", 1)[0].strip()
+            if "=" in line:
+                key, value = line.split("=", 1)
+                values[key.strip()] = value.strip()
+    except OSError:
+        pass
+    return values
+
+
+def accounts() -> list:
+    """The addresses signed in, from the token files the skill keeps, `you%40example.com.json`."""
+    if not TOKENS.is_dir():
+        return []
+    return sorted(urllib.parse.unquote(p.name)[: -len(".json")] for p in TOKENS.glob("*.json"))
+
+
+def account(wanted=None) -> str:
+    wanted = wanted or os.environ.get("OWL_AGENDA_ACCOUNT") or config().get("email")
+    if wanted:
+        return wanted
+    known = accounts()
+    if len(known) == 1:
+        return known[0]
+    if not known:
+        die("no Google account is signed in yet — run:\n  owl-agenda login --email you@example.com", 2)
+    die("more than one account is signed in; say which:\n  " + "\n  ".join(known) + "\n\nor set email= in " + str(CONFIG), 2)
+
+
+def node_available() -> bool:
+    try:
+        subprocess.run([NODE, "--version"], capture_output=True, check=True)
+        return True
+    except (OSError, subprocess.CalledProcessError):
+        return False
+
+
+def fetch(email: str, days: int) -> dict:
+    """Runs the skill's API runner with the calendar script above, and returns what it printed."""
+    fixture = os.environ.get("OWL_AGENDA_FIXTURE")
+    if fixture:
+        return json.loads(Path(fixture).read_text())
+    if not (SKILL / "scripts/workspace.js").is_file():
+        die(f"the google-workspace skill isn't at {SKILL} — set GOOGLE_WORKSPACE_SKILL_DIR", 2)
+    if not node_available():
+        die("node isn't on PATH — `mise use -g node@22` installs it", 2)
+    proc = subprocess.run(
+        [NODE, str(SKILL / "scripts/workspace.js"), "exec", "--email", email, "--timeout", "45000"],
+        input=SCRIPT.replace("%DAYS%", str(days)),
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    out = proc.stdout.strip()
+    if proc.returncode != 0 or not out:
+        detail = (proc.stderr or proc.stdout).strip().splitlines()
+        message = next((line for line in reversed(detail) if line.strip()), "it printed nothing")
+        if "unauthorized" in message.lower() or "401" in message:
+            message += f"\n  owl-agenda login --email {email}"
+        die(message, 1)
+    # The runner prints one JSON value, after any logs it collected.
+    try:
+        return json.loads(out[out.index("{"):])
+    except ValueError:
+        die("the runner printed something that isn't JSON:\n" + out[:400], 1)
+
+
+def shape(data: dict) -> dict:
+    """Adds the strings a widget would otherwise work out: the day, and the time as a person reads it."""
+    cals = data.get("cals") or []
+    events = []
+    for e in data.get("events") or []:
+        start = datetime.fromtimestamp(e["s"]).astimezone()
+        end = datetime.fromtimestamp(e["e"]).astimezone()
+        events.append(
+            {
+                "s": e["s"],
+                "e": e["e"],
+                "all": bool(e.get("all")),
+                "t": e.get("t") or "(no title)",
+                "loc": e.get("loc") or "",
+                "ci": e.get("ci") or 0,
+                "day": start.strftime("%Y-%m-%d"),
+                "time": "all day" if e.get("all") else start.strftime("%H:%M"),
+                "until": "" if e.get("all") else end.strftime("%H:%M"),
+            }
+        )
+    return {"at": data.get("at") or int(time.time()), "cals": cals, "events": events}
+
+
+def day_name(day: str, today: datetime) -> str:
+    d = datetime.strptime(day, "%Y-%m-%d").date()
+    if d == today.date():
+        return "Today"
+    if d == today.date() + timedelta(days=1):
+        return "Tomorrow"
+    return d.strftime("%a %-d %b")
+
+
+def pretty(data: dict) -> str:
+    events = data["events"]
+    if not events:
+        return "Nothing in the calendar."
+    today = datetime.now().astimezone()
+    lines, last = [], None
+    for e in events:
+        if e["day"] != last:
+            last = e["day"]
+            lines.append("" if not lines else "")
+            lines.append(day_name(e["day"], today).upper())
+        colour = (data["cals"][e["ci"]].get("c") if e["ci"] < len(data["cals"]) else None) or ""
+        when = e["time"] if e["time"] == "all day" else f"{e['time']}–{e['until']}"
+        line = f"  {when:<12} {e['t']}"
+        if e["loc"]:
+            line += f"  ({e['loc']})"
+        lines.append(line.rstrip())
+    return "\n".join(lines)
+
+
+def login(email=None):
+    if not (SKILL / "scripts/auth.js").is_file():
+        die(f"the google-workspace skill isn't at {SKILL}", 2)
+    if not email:
+        email = os.environ.get("OWL_AGENDA_ACCOUNT") or config().get("email")
+    if not email:
+        email = input("Google account to sign in: ").strip()
+        if not email:
+            die("no account given", 2)
+    print(f"Signing in {email}. The browser opens; approve Calendar access, and this finishes by itself.", file=sys.stderr)
+    sys.exit(subprocess.run([NODE, str(SKILL / "scripts/auth.js"), "login", "--email", email]).returncode)
+
+
+def main(argv):
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    flags = [a for a in argv[1:] if a.startswith("--")]
+    days = int(config().get("days") or 7)
+    email = None
+    for i, a in enumerate(argv[1:]):
+        if a == "--days" and i + 2 <= len(argv) - 1:
+            days = int(argv[i + 2])
+        elif a == "--email" and i + 2 <= len(argv) - 1:
+            email = argv[i + 2]
+    if args and args[0].isdigit():
+        days = int(args.pop(0))
+    if args and args[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0
+    command = args[0] if args else "agenda"
+
+    if command == "accounts":
+        known = accounts()
+        print("\n".join(known) if known else "No Google account is signed in. Run: owl-agenda login --email you@example.com")
+        return 0
+    if command == "login":
+        login(email)
+    if command in ("json", "agenda"):
+        if not node_available():
+            if command == "json":
+                print(json.dumps({"at": int(time.time()), "cals": [], "events": [], "error": "node is not installed"}))
+                return 1
+            die("node isn't on PATH — `mise use -g node@22` installs it", 2)
+        # A fixture is what the tests below render: it needs no account and no network.
+        if not accounts() and not os.environ.get("OWL_AGENDA_FIXTURE"):
+            if command == "json":
+                print(json.dumps({"at": int(time.time()), "cals": [], "events": [], "error": "no account signed in: owl-agenda login --email you@example.com"}))
+                return 1
+            account()  # dies with the login hint
+        data = shape(fetch(account(email) if not os.environ.get("OWL_AGENDA_FIXTURE") else "fixture@example.com", days))
+        if command == "json":
+            print(json.dumps(data, separators=(",", ":")))
+        else:
+            print(pretty(data))
+        return 0
+    if command == "whoami":
+        print(account(email))
+        return 0
+    print(__doc__.strip(), file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv))
+    except KeyboardInterrupt:
+        sys.exit(130)

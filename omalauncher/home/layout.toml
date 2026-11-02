@@ -14,9 +14,9 @@ face = "market-face-simonschubert-omarchy.owl"
 
 [[page]]
 tiles = [
-  { widget = "10-today.owl", x = 0, y = 0, w = 9, h = 5 },
-  { widget = "20-fetch.owl", x = 0, y = 5, w = 9, h = 6 },
-  { widget = "market-reymarch995-now-playing.owl", x = 0, y = 11, w = 9, h = 4 },
+  { widget = "10-today.owl", x = 0, y = 0, w = 9, h = 4 },
+  { widget = "market-reymarch995-now-playing.owl", x = 0, y = 4, w = 9, h = 4 },
+  { widget = "30-agenda.owl", x = 0, y = 8, w = 9, h = 6 },
 ]
 
 [[page]]

@@ -11,13 +11,14 @@ font = "Maple Mono NF"
 columns = 9
 
 [widgets]
-frost = true
+opacity = 0.93
+border-width = 0
 
 [icons]
 monochrome = true
 
 [corners]
-scale = 0.5
+scale = 1
 
 [status-bar]
 shown = false

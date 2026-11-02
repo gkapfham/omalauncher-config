@@ -40,5 +40,21 @@ done
 if [ -d pi/agent/themes ]; then cp -Rp pi/agent/themes/. "$pi"/themes/; fi
 if [ -f AGENTS.md ]; then cp -p AGENTS.md "$HOME"/; fi
 
+if [ -f bin/owl-agenda ]; then
+  mkdir -p "$HOME"/.local/bin
+  cp -p bin/owl-agenda "$HOME"/.local/bin/
+  chmod +x "$HOME"/.local/bin/owl-agenda
+fi
+if [ -d pi/agent/skills ]; then
+  cp -Rp pi/agent/skills/. "$pi"/skills/
+  # The skill's npm deps are not in the repository; npm puts them back.
+  for skill in "$pi"/skills/*/; do
+    if [ -f "$skill/package.json" ] && [ ! -d "$skill/node_modules" ]; then
+      echo "Installing ${skill}package.json dependencies (a minute or two)…"
+      (cd "$skill" && npm install --omit=dev --no-audit --no-fund) || echo "run by hand: cd $skill && npm install"
+    fi
+  done
+fi
+
 echo "Restored. The launcher picks the widgets up within seconds; pi's extensions load as it starts."
 for f in "$cfg"/widgets/*.owl; do owl-check "$f" >/dev/null 2>&1 || owl-check "$f"; done

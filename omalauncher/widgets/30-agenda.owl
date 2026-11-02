@@ -1,0 +1,135 @@
+widget "agenda" {
+  size: 9x6
+  minSize: 3x3
+  padding: 12
+
+  meta {
+    owl: 17
+    description: "The next days of your Google calendars. owl-agenda fetches them itself, so it works with pi closed; tap for two weeks, pull down to refresh"
+    version: "1.0"
+    license: "MIT"
+    category: "productivity"
+  }
+
+  // owl-agenda (in ~/.local/bin) asks Google with the token the pi google-workspace skill keeps, and prints the
+  // events as JSON. No account yet: it prints `error`, which the tile shows with a tap that signs one in.
+  source ev = cmd("owl-agenda json") every 10m json timeout 60s
+  source now = clock every 1m
+
+  let today = fmtTime(now, "yyyy-MM-dd")
+  let tomorrow = fmtTime(now + 86400, "yyyy-MM-dd")
+  let events = ev.events ?? []
+  let cals = ev.cals ?? []
+  let failed = ev.error
+  // What fits: a day heading is 22, an event row 23, the heading 18.
+  let rows = clamp(int(((tileHeight ?? 460) - 46) / 23), 1, 20)
+  let shown = events.take(rows)
+
+  // One event: the calendar's colour, its time, its name. Past ones, still listed today, dimmed.
+  component Event(e) {
+    Row {
+      height: 21
+      gap: 7
+      align: center
+      Box { width: 6; height: 6; radius: 3; background: cals[e.ci].c ?? accent }
+      Text { text: e.all ? "all day" : e.time; font: mono; fontSize: 10; width: 72; color: muted; maxLines: 1 }
+      Text { text: e.t; fontSize: 13; weight: 1; maxLines: 1; color: e.e < now ? muted : foreground }
+    }
+  }
+
+  // A day's heading: today and tomorrow by name, the rest by date.
+  component DayHeading(day, at) {
+    Text {
+      text: day == today ? "TODAY" : day == tomorrow ? "TOMORROW" : upper(fmtTime(at, "EEE d MMM"))
+      font: mono
+      fontSize: 10
+      color: accent
+      maxLines: 1
+      letterSpacing: 1
+    }
+  }
+
+  onTap: screen()
+
+  Column {
+    gap: 2
+    Row {
+      gap: 6
+      align: center
+      Text { text: "agenda"; font: mono; fontSize: 11; color: muted; weight: 1; maxLines: 1; letterSpacing: 1 }
+      if failed != null {
+        Text { text: "offline"; font: mono; fontSize: 10; color: orange; maxLines: 1 }
+      } else if ev == null {
+        Text { text: "…"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+      }
+    }
+    if failed != null {
+      Text {
+        text: contains(failed, "no account") ? "no Google account yet — tap to sign in" : failed
+        style: small
+        color: muted
+        maxLines: 3
+        onTap: terminal("owl-agenda login")
+      }
+    } else if ev == null {
+      Text { text: "loading…"; style: small; color: muted }
+    } else if len(events) == 0 {
+      Text { text: "nothing in the calendar"; style: small; color: muted }
+    } else {
+      for e, i in shown key e.s + e.t {
+        if i == 0 || shown[i - 1].day != e.day {
+          DayHeading { day: e.day; at: e.s }
+        }
+        Event { e: e }
+      }
+      if len(events) > len(shown) {
+        Text { text: "+${len(events) - len(shown)} more"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+      }
+    }
+  }
+
+  screen {
+    title: "agenda"
+    if failed != null {
+      Column {
+        gap: 10
+        Text { text: failed; style: body; maxLines: 6 }
+        Text { text: "owl-agenda login"; font: mono; style: body; color: accent; onTap: terminal("owl-agenda login") }
+      }
+    } else {
+      Column {
+        scroll: true
+        gap: 2
+        onPull: refresh()
+        for e, i in events key e.s + e.t {
+          if i == 0 || events[i - 1].day != e.day {
+            Box {
+              padding: [0, 10, 0, 4]
+              DayHeading { day: e.day; at: e.s }
+            }
+          }
+          Row {
+            gap: 8
+            padding: [0, 7, 0, 7]
+            align: top
+            // The dot and the time line up with the first line of a title that may take two.
+            Box { width: 8; height: 8; radius: 4; background: cals[e.ci].c ?? accent; offset: [0, 6] }
+            Text { text: e.all ? "all day" : "${e.time}–${e.until}"; font: mono; fontSize: 12; width: 118; color: muted; maxLines: 1; offset: [0, 2] }
+            Column {
+              weight: 1
+              gap: 2
+              Text { text: e.t; fontSize: 15; maxLines: 3; color: e.e < now ? muted : foreground }
+              if e.loc != "" {
+                Text { text: e.loc; style: small; color: muted; maxLines: 2 }
+              }
+            }
+          }
+        }
+        if len(events) == 0 {
+          Text { text: "nothing in the calendar"; style: body; color: muted }
+        }
+        Box { height: 12 }
+      }
+    }
+  }
+}
