@@ -40,5 +40,5 @@ done
 if [ -d pi/agent/themes ]; then cp -Rp pi/agent/themes/. "$pi"/themes/; fi
 if [ -f AGENTS.md ]; then cp -p AGENTS.md "$HOME"/; fi
 
-echo "Restored. The launcher picks the widgets up within seconds; pi' extensions load as it starts."
+echo "Restored. The launcher picks the widgets up within seconds; pi's extensions load as it starts."
 for f in "$cfg"/widgets/*.owl; do owl-check "$f" >/dev/null 2>&1 || owl-check "$f"; done
