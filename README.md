@@ -14,6 +14,8 @@ This phone's omalauncher look and its pi setup, kept in git so a reinstall, a ne
 | `pi/agent/extensions/` | `~/.pi/agent/extensions/` — `swipe-prompt.ts`, which turns what the pi tile's line sends into a prompt |
 | `pi/agent/settings.json`, `keybindings.json`, `open-tui.json`, `themes/` | `~/.pi/agent/` |
 | `AGENTS.md` | `~/AGENTS.md` — what pi reads about this phone |
+| `bin/owl-agenda` | `~/.local/bin/` — the calendar CLI behind the `agenda` widget; also usable in pi and any terminal |
+| `pi/agent/skills/google-workspace/` | `~/.pi/agent/skills/` — Gregory's Google Workspace skill (OAuth + `googleapis`), which needs `npm install` once; `restore.sh` does that |
 
 Deliberately **not** saved: `pi/agent/auth.json` (your API keys), `pi/agent/sessions/` (the conversations), caches,
 `.stock-*` files and `.removed/` widgets — the launcher hands those out again by itself.
@@ -61,3 +63,24 @@ From then on, `save.sh` pushes without asking.
 
 The same repository restores anywhere omalauncher runs — clone it, run `restore.sh` — and you can edit widget files on
 a laptop, commit, and pull them onto the phone with `cd ~/omalauncher-config && git pull && ./restore.sh`.
+
+## The agenda widget
+
+`30-agenda.owl` shows the next days of your Google calendars. It is standalone: `owl-agenda` asks Google itself with
+the token the `google-workspace` skill keeps, so pi never has to be running.
+
+```sh
+owl-agenda                      # the next week, in the terminal (and in pi's bash)
+owl-agenda 14                   # two weeks
+owl-agenda json                 # what the widget reads
+owl-agenda accounts             # who is signed in
+owl-agenda login --email you@example.com   # the one-time Google sign-in, in the browser
+```
+
+Signing in is once per account; the token lives in `~/.pi/google-workspace/tokens/` (never in this repository).
+Defaults — the account and how many days — go in `~/.config/owl-agenda/config`:
+
+```
+email=you@example.com
+days=14
+```
