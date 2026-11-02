@@ -25,4 +25,4 @@ if [ -z "$email" ]; then
   exit 1
 fi
 
-node "$(dirname "$0")/drive-upload.js" "$out" "$email" 10
+node "$(dirname "$0")/drive.js" upload "$out" "$email" 10
