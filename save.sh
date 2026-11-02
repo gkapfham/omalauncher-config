@@ -44,6 +44,7 @@ if [ -f "$HOME"/AGENTS.md ]; then cp -p "$HOME"/AGENTS.md .; fi
 # restore.sh installs those again with npm.
 mkdir -p bin pi/agent/skills
 if [ -f "$HOME"/.local/bin/owl-agenda ]; then cp -p "$HOME"/.local/bin/owl-agenda bin/; fi
+if [ -f "$HOME"/.local/bin/owl-config ]; then cp -p "$HOME"/.local/bin/owl-config bin/; fi
 if [ -d "$pi"/skills ]; then tar -C "$pi"/skills --exclude=node_modules -cf - . | tar -C pi/agent/skills -xf -; fi
 
 git add -A

@@ -45,6 +45,11 @@ if [ -f bin/owl-agenda ]; then
   cp -p bin/owl-agenda "$HOME"/.local/bin/
   chmod +x "$HOME"/.local/bin/owl-agenda
 fi
+if [ -f bin/owl-config ]; then
+  mkdir -p "$HOME"/.local/bin
+  cp -p bin/owl-config "$HOME"/.local/bin/
+  chmod +x "$HOME"/.local/bin/owl-config
+fi
 if [ -d pi/agent/skills ]; then
   cp -Rp pi/agent/skills/. "$pi"/skills/
   # The skill's npm deps are not in the repository; npm puts them back.

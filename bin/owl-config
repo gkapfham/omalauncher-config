@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+"""Back up and restore this phone's omalauncher setup.
+
+The backup lives in Google Drive -> omalauncher-backups, made from the git
+repository in ~/omalauncher-config. Run by hand or by backup.owl:
+
+    owl-config save [message]      save + upload, keeping the newest 10
+    owl-config list                refresh the cached list of backups
+    owl-config restore latest      download the newest and apply it
+    owl-config restore <id|name> [--dry-run]
+    owl-config status              what the last run said
+
+Applying a backup sets the current files aside first, under
+~/.local/share/omalauncher-restored/, by restore.sh.
+"""
+import fcntl
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+from pathlib import Path
+
+HOME = Path.home()
+REPO = HOME / "omalauncher-config"
+CACHE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "owl-config"
+STATUS = CACHE / "status.json"
+BACKUPS = CACHE / "backups.json"
+LOCK = CACHE / "lock"
+LOG = CACHE / "log.txt"
+AUTH = HOME / ".pi/agent/skills/google-workspace/scripts/auth.js"
+NODE = shutil.which("node") or "node"
+
+
+def ensure_cache():
+    CACHE.mkdir(parents=True, exist_ok=True)
+
+
+def write_json(path, data):
+    ensure_cache()
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False))
+    os.replace(tmp, path)
+
+
+def write_status(state, message, **extra):
+    data = {"state": state, "message": message, "at": int(time.time())}
+    data.update({key: value for key, value in extra.items() if value is not None})
+    write_json(STATUS, data)
+
+
+def log(*parts):
+    ensure_cache()
+    line = " ".join(str(part) for part in parts).rstrip()
+    with LOG.open("a") as handle:
+        handle.write(time.strftime("%Y-%m-%d %H:%M:%S") + " " + line + "\n")
+
+
+def last_line(text):
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    return lines[-1] if lines else ""
+
+
+def account():
+    chosen = os.environ.get("OWL_AGENDA_ACCOUNT")
+    if chosen:
+        return chosen
+    if not AUTH.is_file():
+        raise RuntimeError("the google-workspace skill isn't installed")
+    done = subprocess.run([NODE, str(AUTH), "accounts"], capture_output=True, text=True)
+    found = re.search(r"^- email:\s*(\S+)", done.stdout or "", re.MULTILINE)
+    if not found:
+        raise RuntimeError("no Google account is signed in; run: owl-agenda login --email you@example.com")
+    return found.group(1)
+
+
+def run_logged(command, timeout=None):
+    log("$ " + " ".join(str(part) for part in command))
+    done = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+    if done.stdout:
+        log(done.stdout)
+    if done.stderr:
+        log(done.stderr)
+    log("exit " + str(done.returncode))
+    return done
+
+
+def list_backups():
+    if not (REPO / "drive.js").is_file():
+        raise RuntimeError(f"missing {REPO / 'drive.js'}")
+    done = run_logged([NODE, str(REPO / "drive.js"), "list", account()], timeout=180)
+    if done.returncode != 0:
+        raise RuntimeError(last_line(done.stderr) or last_line(done.stdout) or "could not list the backups")
+    output = (done.stdout or "").strip().splitlines()
+    if not output:
+        raise RuntimeError("the backup list came back empty")
+    backups = json.loads(output[-1])
+    write_json(BACKUPS, backups)
+    return backups
+
+
+def find_backup(backups, wanted):
+    if wanted in ("latest", "", None):
+        return backups[0] if backups else None
+    for backup in backups:
+        if wanted in (backup.get("id"), backup.get("name")):
+            return backup
+    return None
+
+
+def save(message):
+    write_status("saving", "saving the setup…")
+    try:
+        done = run_logged([str(REPO / "drive-backup.sh"), message], timeout=900)
+        if done.returncode != 0:
+            write_status("error", last_line(done.stderr) or last_line(done.stdout) or "backup failed")
+            return 1
+        backups = list_backups()
+    except Exception as error:  # noqa: BLE001 - report whatever went wrong in the status file
+        write_status("error", str(error))
+        return 1
+    newest = backups[0] if backups else None
+    write_status(
+        "ok",
+        "backed up " + (newest["name"] if newest else "the setup"),
+        link=newest.get("link") if newest else None,
+        name=newest.get("name") if newest else None,
+    )
+    return 0
+
+
+def restore(wanted, dry_run=False):
+    write_status("restoring", "finding the backup…")
+    try:
+        backups = list_backups()
+    except Exception as error:  # noqa: BLE001
+        write_status("error", str(error))
+        return 1
+    target = find_backup(backups, wanted)
+    if target is None:
+        write_status("error", f"no backup named {wanted}")
+        return 1
+
+    write_status("restoring", f"downloading {target['name']}…", link=target.get("link"), name=target["name"])
+    try:
+        with tempfile.TemporaryDirectory(prefix="owl-config-") as folder:
+            archive = Path(folder) / target["name"]
+            done = run_logged(
+                [NODE, str(REPO / "drive.js"), "download", target["id"], str(archive), account()],
+                timeout=300,
+            )
+            if done.returncode != 0 or not archive.is_file():
+                raise RuntimeError(last_line(done.stderr) or "the download failed")
+
+            with tarfile.open(archive, "r:gz") as tar:
+                names = tar.getnames()
+                if not any(name.endswith("restore.sh") for name in names):
+                    raise RuntimeError("that file isn't an omalauncher backup")
+                tar.extractall(folder, filter="data")
+
+            extracted = Path(folder) / "omalauncher-config"
+            script = extracted / "restore.sh"
+            if not script.is_file():
+                raise RuntimeError("the backup has no restore.sh")
+
+            if dry_run:
+                write_status("ok", f"checked {target['name']}; nothing was changed")
+                return 0
+
+            write_status("restoring", f"applying {target['name']}…", link=target.get("link"), name=target["name"])
+            done = run_logged(["sh", str(script)], timeout=900)
+            if done.returncode != 0:
+                raise RuntimeError(last_line(done.stderr) or last_line(done.stdout) or "restore.sh failed")
+    except Exception as error:  # noqa: BLE001
+        write_status("error", str(error))
+        return 1
+
+    write_status(
+        "ok",
+        f"restored {target['name']}; the previous setup was set aside",
+        link=target.get("link"),
+        name=target["name"],
+    )
+    return 0
+
+
+def main():
+    ensure_cache()
+    command = sys.argv[1] if len(sys.argv) > 1 else "status"
+
+    if command == "status":
+        print(STATUS.read_text() if STATUS.is_file() else "{}")
+        return 0
+
+    if command == "list":
+        try:
+            print(json.dumps(list_backups()))
+            return 0
+        except Exception as error:  # noqa: BLE001
+            print(str(error), file=sys.stderr)
+            return 1
+
+    if command not in ("save", "restore"):
+        print("usage: owl-config save [message] | list | restore <latest|id|name> [--dry-run] | status", file=sys.stderr)
+        return 2
+
+    handle = LOCK.open("w")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("another backup or restore is already running", file=sys.stderr)
+        return 1
+
+    if command == "save":
+        message = " ".join(sys.argv[2:]).strip() or time.strftime("backup %Y-%m-%d %H:%M")
+        return save(message)
+
+    arguments = [arg for arg in sys.argv[2:] if arg != "--dry-run"]
+    if not arguments:
+        print("usage: owl-config restore <latest|id|name> [--dry-run]", file=sys.stderr)
+        return 2
+    return restore(arguments[0], "--dry-run" in sys.argv[3:])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

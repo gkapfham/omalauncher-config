@@ -15,6 +15,7 @@ This phone's omalauncher look and its pi setup, kept in git so a reinstall, a ne
 | `pi/agent/settings.json`, `keybindings.json`, `open-tui.json`, `themes/` | `~/.pi/agent/` |
 | `AGENTS.md` | `~/AGENTS.md` — what pi reads about this phone |
 | `bin/owl-agenda` | `~/.local/bin/` — the calendar CLI behind the `agenda` widget; also usable in pi and any terminal |
+| `bin/owl-config` | `~/.local/bin/` — the backup/restore CLI behind the `backup` app |
 | `pi/agent/skills/google-workspace/` | `~/.pi/agent/skills/` — Gregory's Google Workspace skill (OAuth + `googleapis`), which needs `npm install` once; `restore.sh` does that |
 
 Deliberately **not** saved: `pi/agent/auth.json` (your API keys), `pi/agent/sessions/` (the conversations), caches,
@@ -45,6 +46,26 @@ account.
 To restore, download the newest `.tar.gz` from Drive, extract it in `~` (it expands to `~/omalauncher-config/`), then run
 `~/omalauncher-config/restore.sh`. The archive holds no tokens or API keys; sign in again with
 `owl-agenda login --email you@example.com` if the agenda needs it.
+
+## Backup & restore from the launcher
+
+`backup.owl` adds **backup & restore** to the app drawer. It has **back up now** and **refresh list**, shows how the last
+run went, and lists the Drive backups newest first, each with **restore**. Restore asks first, and the current setup is set
+aside under `~/.local/share/omalauncher-restored/` before anything is replaced.
+
+The same thing from a terminal:
+
+```sh
+owl-config save "before changing the home layout"
+owl-config list
+owl-config restore latest
+owl-config restore <id|name> --dry-run   # download and check, change nothing
+owl-config status
+```
+
+`owl-config` keeps a lock so two runs can't overlap, writes progress to `~/.cache/owl-config/status.json` (what the app
+shows), and logs to `~/.cache/owl-config/log.txt`. A restore downloads the archive, checks it is an omalauncher backup,
+and only then applies it.
 
 **Not in any backup:** widget `persist` state and `secret` values (the launcher keeps those in its Android app data, not
 in files), Google tokens, and fonts. Re-enter secrets and sign in again on a new phone.
