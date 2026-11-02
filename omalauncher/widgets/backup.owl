@@ -28,6 +28,13 @@ app "backup" {
   // The id of the backup waiting for a yes in the popup.
   state confirm = ""
 
+  // First open with no cached list (a new install): fetch it once, then the file source shows it.
+  on bl first {
+    if len(bl ?? []) == 0 {
+      run("setsid -f $HOME/.local/bin/owl-config list >/dev/null 2>&1 </dev/null")
+    }
+  }
+
   let busy = st != null && (st.state == "saving" || st.state == "restoring")
   let stateColor = st == null ? muted : st.state == "error" ? red : st.state == "ok" ? green : yellow
 
@@ -44,14 +51,14 @@ app "backup" {
         weight: 1
         onTap: {
           if !busy {
-            run("setsid $HOME/.local/bin/owl-config save >/dev/null 2>&1 &")
+            run("setsid -f $HOME/.local/bin/owl-config save >/dev/null 2>&1 </dev/null")
           }
         }
       }
       Button {
         text: "refresh list"
         weight: 1
-        onTap: run("setsid $HOME/.local/bin/owl-config list >/dev/null 2>&1 &")
+        onTap: run("setsid -f $HOME/.local/bin/owl-config list >/dev/null 2>&1 </dev/null")
       }
     }
 
@@ -128,7 +135,7 @@ app "backup" {
           color: red
           weight: 1
           onTap: {
-            run("setsid $HOME/.local/bin/owl-config restore ${sh(confirm)} >/dev/null 2>&1 &")
+            run("setsid -f $HOME/.local/bin/owl-config restore ${sh(confirm)} >/dev/null 2>&1 </dev/null")
             confirm = ""
           }
         }
