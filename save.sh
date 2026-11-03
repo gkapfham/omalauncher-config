@@ -34,7 +34,7 @@ if [ -d "$HOME"/.config/omarchy/backgrounds ]; then cp -Rp "$HOME"/.config/omarc
 # Hand-installed fonts (Maple Mono NF among them): TTF compresses well with zstd,
 # so the whole family fits in every backup. restore.sh puts it back and runs fc-cache.
 if [ -d "$HOME"/.local/share/fonts ]; then
-  tar -C "$HOME"/.local/share -cf - fonts | zstd -q -f -T0 -19 -o fonts.tar.zst
+  tar -C "$HOME"/.local/share -cf - fonts | zstd -q -f -T1 -19 -o fonts.tar.zst
 else
   rm -f fonts.tar.zst
 fi
