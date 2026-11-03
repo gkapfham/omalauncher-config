@@ -35,3 +35,8 @@ tiles = [
 tiles = [
   { widget = "market-nicomaure-speedtest.owl", x = 0, y = 0, w = 8, h = 10 },
 ]
+
+[[page]]
+tiles = [
+  { widget = "market-nyaadesu-tailscale.owl", x = 0, y = 0, w = 3, h = 3 },
+]

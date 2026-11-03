@@ -2,7 +2,7 @@ widget "now-playing" {
   size: 6x2
   minSize: 3x2
   requires { pacman: [] }
-  meta { description: "What's playing on your phone, from any music or podcast app: album art, track, progress and play, pause and skip. Tap the tile to open the app"; version: "1.5"; license: "MIT"; category: "media"; owl: 16 }
+  meta { description: "What's playing on your phone, from any music or podcast app: album art, track, progress and play, pause and skip. It keeps the last track when Android ends the session, and a tap opens the app that plays it"; version: "1.6"; license: "MIT"; category: "media"; owl: 16 }
 
   // What it says, in the phone's language where it has a set. Tracks, artists and apps come as they are.
   strings {
@@ -38,19 +38,41 @@ widget "now-playing" {
 
   let has = m != null && m.title != null
   let allowed = m == null || m.available != false
-  let dur = num(m.duration, 0)
-  let pos = dur > 0 ? clamp(num(m.position, 0), 0, dur) : num(m.position, 0)
+
+  // Android takes the session away a while after playback stops (or the app is swiped off), and the
+  // tile would fall back to "nothing playing". Keep the last track, so it stays until another plays.
+  state kept = null persist
+  let snap = has ? {title: m.title, artist: m.artist, album: m.album, app: m.app, package: m.package, art: m.art, duration: m.duration, position: m.position} : null
+  let cur = has ? m : (kept != null && kept.title != null ? kept : null)
+  let playing = has && m.playing == true
+  let stale = cur != null && !has
+  // Keep the art it had when an update comes without one: art loads a moment after the track does.
+  let save = snap == null ? null : (snap.art == null && kept != null ? merge(snap, {art: kept.art}) : snap)
+  // Saving the track when it changes and when it pauses; the place it got to, once a minute while
+  // it plays (not on every position update, which would write the saved state every second).
+  on m first { if save != null { kept = save } }
+  on m.title { if save != null { kept = save } }
+  on m.playing { if value == false && save != null { kept = save } }
+  every 60s { if has && playing { kept = save } }
+
+  let dur = num(cur.duration, 0)
+  let pos = dur > 0 ? clamp(num(cur.position, 0), 0, dur) : num(cur.position, 0)
   let narrow = cols != null && cols < 5
+  // Enough rows to give a long episode title a second line.
+  let roomy = rows == null || rows >= 3
   let art = clamp((tileHeight ?? 130) - 26, 40, 132)
   // A tile taller than wide (landscape home screen, or a tall portrait tile) stacks
   // art, text and controls vertically instead of side by side.
   let tall = tileWidth != null && tileHeight != null && tileHeight > tileWidth * 1.3
   let tallArt = tall ? clamp(min(tileWidth - 26, tileHeight * 0.45), 40, 240) : 0
 
-  onTap: media("open")
+  // A tap opens the app that plays it - the podcast player, say - and it still knows which one
+  // after Android has taken its session away. With nothing known yet, media("open") opens the app
+  // that's playing, or the setting that lets the launcher see it.
+  onTap: if cur != null && cur.package != null { androidApp(cur.package) } else { media("open") }
 
   component Clock(s) {
-    Text { text: s == null ? "" : "${floor(s / 60)}:${pad(floor(s % 60), 2, "0")}"; style: label; color: muted; font: mono; maxLines: 1; width: len("${floor(s / 60)}") * 7 + 22 }
+    Text { text: s == null ? "" : "${floor(s / 60)}:${pad(floor(s % 60), 2, "0")}"; style: label; color: muted; font: mono; maxLines: 1 }
   }
 
   // Drawn, not glyphs: the launcher's icon font only carries weather symbols. Paths need an
@@ -65,7 +87,7 @@ widget "now-playing" {
         let d = min(width, height)
         if kind == "toggle" {
           circle(cx, cy, d / 2, fill: foreground)
-          if m.playing == true {
+          if playing {
             rect(cx - d * 0.15, cy - d * 0.18, d * 0.11, d * 0.36, radius: d * 0.03, fill: background)
             rect(cx + d * 0.04, cy - d * 0.18, d * 0.11, d * 0.36, radius: d * 0.03, fill: background)
           } else {
@@ -93,9 +115,10 @@ widget "now-playing" {
     }
   }
 
-  component Art(src, d) {
+  component Art(src, d, dim = false) {
     Box {
       size: d
+      opacity: dim ? 0.55 : 1
       // Rounded as much as the launcher's corner style: square on edge, 8dp on round.
       radius: 8 * corners
       clip: true
@@ -117,10 +140,10 @@ widget "now-playing" {
     Row {
       align: center
       gap: 6
-      if m.playing == true {
+      if playing {
         Bars { }
       }
-      Text { text: lower(m.app ?? ""); style: label; color: m.playing == true ? accent : muted; maxLines: 1; weight: 1 }
+      Text { text: lower(cur.app ?? ""); style: label; color: playing ? accent : muted; maxLines: 1; weight: 1 }
     }
   }
 
@@ -132,7 +155,7 @@ widget "now-playing" {
       Text { text: str.allow; style: small; maxLines: 3 }
     }
   } else {
-    if !has {
+    if cur == null {
       if tall {
         Column {
           gap: 10
@@ -157,13 +180,13 @@ widget "now-playing" {
       if tall {
         Column {
           gap: 8
-          Art { src: m.art; d: tallArt }
+          Art { src: cur.art; d: tallArt; dim: stale }
           Column {
             gap: 2
             AppLine { }
-            Text { text: m.title; style: body; bold: true; maxLines: 3 }
-            Text { text: m.artist ?? ""; style: small; color: muted; maxLines: 2 }
-            Text { text: m.album ?? ""; style: small; color: muted; maxLines: 1 }
+            Text { text: cur.title; style: body; bold: true; maxLines: 3 }
+            Text { text: cur.artist ?? ""; style: small; color: muted; maxLines: 2 }
+            Text { text: cur.album ?? ""; style: small; color: muted; maxLines: 1 }
           }
           Spacer { weight: 1 }
           if dur > 0 {
@@ -191,14 +214,14 @@ widget "now-playing" {
           align: center
           gap: 12
           if !narrow {
-            Art { src: m.art; d: art }
+            Art { src: cur.art; d: art; dim: stale }
           }
           Column {
             weight: 1
             gap: 2
             AppLine { }
-            Text { text: m.title; style: body; bold: true; maxLines: narrow ? 2 : 1 }
-            Text { text: [m.artist, narrow ? null : m.album].filter(x => x != null).join(" · "); style: small; color: muted; maxLines: 1 }
+            Text { text: cur.title; style: body; bold: true; maxLines: narrow ? 2 : roomy ? 2 : 1 }
+            Text { text: [cur.artist, narrow ? null : cur.album].filter(x => x != null).join(" · "); style: small; color: muted; maxLines: 1 }
             Spacer { weight: 1 }
             if dur > 0 {
               Progress { value: pos; max: dur; color: accent; track: alpha(muted, 0.2); animate value: tween(900ms, "linear") }
@@ -208,7 +231,7 @@ widget "now-playing" {
               gap: 4
               if dur > 0 {
                 Clock { s: pos }
-                Text { text: "/"; style: label; color: alpha(muted, 0.5); width: 8 }
+                Text { text: "/"; style: label; color: alpha(muted, 0.5) }
                 Clock { s: dur }
               }
               Spacer { weight: 1 }

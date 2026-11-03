@@ -49,6 +49,16 @@ panel "controls" {
     ]
   let clearable = count(n.items ?? [], i => i.clearable)
   let batColor = bat == null ? muted : bat.level <= 15 ? red : bat.level <= 30 ? yellow : green
+  // What Android's own brightness slider would show. The launcher reads the brightness in steps of the phone's maximum,
+  // but the slider moves along a perceptual curve (SystemUI's BrightnessUtils: Hybrid Log Gamma), so a quarter of the
+  // steps sits about three quarters of the way up the slider. Read straight out, the panel showed far less than the
+  // shade's slider did. Owl has no log, so HLG's log is summed as its series; 14 terms hold it to a fraction of a point.
+  let bSteps = (m.brightness ?? 0) / 100
+  let bGamma = 12 * bSteps
+  let bZ = bGamma <= 1 ? 0 : (bGamma - 1.28466892) / (bGamma + 0.71533108)
+  let bLog = 2 * sum(range(14), k => pow(bZ, 2 * k + 1) / (2 * k + 1))
+  let brightPct = m.brightness == null ? null : round(100 * (bGamma <= 1 ? sqrt(bGamma) * 0.5 : 0.17883277 * bLog + 0.55991073))
+  let brightStored = m.brightness == null ? "…" : "${m.brightness}%"
   // What's playing, as the now playing widget shows it: art, the app with a live equalizer and drawn buttons.
   // Drawn, not glyphs: the launcher's icon font only carries weather symbols. Play/pause is a solid disc with the
   // glyph in the background color.
@@ -234,11 +244,37 @@ panel "controls" {
         fill: width
         align: center
         gap: 4
-        Text { text: "volume"; width: 72 }
+        Text { text: "volume"; width: 120 }
         Text { text: "["; color: accent }
         Slider { value: v.muted ? 0 : v.level; step: 100 / (v.steps ?? 15); live: true; color: accent; track: background; weight: 1; onChange: volume(value) }
         Text { text: "]"; color: accent }
         Text { text: v.muted ? "♪ off" : "♪ on"; color: orange; width: 56; align: end; onTap: volume("toggle") }
+      }
+      Spacer { height: 1; fill: width; background: border }
+      // Android lets an app read the brightness but not set it -- a launcher may not switch it, so a Slider here would
+      // move and change nothing -- so this bar shows what Android's own slider would, and a tap opens that slider:
+      // Display settings has it as its first row.
+      Row {
+        fill: width
+        align: center
+        gap: 4
+        onTap: { haptic(); settings("display") }
+        Text { text: "brightness"; width: 120 }
+        Text { text: "["; color: accent }
+        Progress { value: brightPct ?? 0; color: accent; track: background; weight: 1; height: 6 }
+        Text { text: "]"; color: accent }
+        Text { text: brightPct == null ? "…" : "~${brightPct}%"; color: orange; width: 64; align: end }
+      }
+      Row {
+        fill: width
+        onTap: { haptic(); settings("display") }
+        Text {
+          text: (m.autoBrightness ? "auto · " : "") + "tap for Android's slider"
+          style: small
+          color: muted
+          weight: 1
+        }
+        Text { text: "stored " + brightStored; style: small; color: muted }
       }
     }
 
@@ -287,30 +323,6 @@ panel "controls" {
           }
         }
       }
-    }
-
-    // Brightness is readable by any app but not writable by the launcher, so this shows it and opens Android's settings.
-    Column {
-      fill: width
-      gap: 8
-      padding: [14, 12]
-      background: surface
-      radius: 8 * corners
-      onTap: { haptic(); settings("display") }
-      Row {
-        align: center
-        Text { text: "screen"; style: label; weight: 1 }
-        if m.autoBrightness {
-          Text { text: "auto"; style: small; color: accent }
-        }
-      }
-      Row {
-        align: center
-        gap: 10
-        Text { text: m.brightness == null ? "…" : "${m.brightness}%"; color: orange; width: 56 }
-        Progress { value: m.brightness ?? 0; color: accent; track: alpha(foreground, 0.1); height: 6; weight: 1 }
-      }
-      Text { text: "tap for Android's display settings"; style: small; color: muted }
     }
 
     // Only while something plays or is paused in an app; without notification access there's nothing to show either.

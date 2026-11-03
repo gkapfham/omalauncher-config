@@ -1,0 +1,304 @@
+widget "netbird" {
+  size: 3x3
+  minSize: 2x1
+  meta { owl: 12; description: "Whether this phone's NetBird VPN is on, the exit node it routes through and its public IP (ipinfo.io), and your net's peers via the NetBird API, with their exit nodes switched on or off"; version: "2.0"; license: "MIT"; category: "system" }
+
+  requires { pacman: ["iproute2"] }
+
+  // A personal access token from app.netbird.io (Team → your user, or a service user, → Create token),
+  // typed on the screen. Kept encrypted on the phone, never in this file or on Linux; it only ever
+  // goes to api.netbird.io.
+  state token = null secret
+  state draft = ""
+  state keyMsg = ""         // why the token typed wasn't saved
+  state myId = "" persist   // the peer marked as this phone, for phones where ip can't see the tunnel
+  state busy = ""           // the peer whose exit node is being switched
+  state routeRes = null     // the routes endpoint's answer
+
+  // A net of your own: change api.netbird.io below to its management address, https://netbird.example.com/api.
+  source api = http(token == null ? null : "https://api.netbird.io/api/peers", {Authorization: "Token ${token}"}) every 1m timeout 15s json status
+  source routeList = http(token == null ? null : "https://api.netbird.io/api/routes", {Authorization: "Token ${token}"}) every 1m timeout 15s json status
+  // NetBird's tunnel is an interface with an address in 100.64.0.0/10 (wt0). Android usually keeps it out
+  // of this shell's reach, so it only ever proves the VPN is on, never that it's off.
+  source local = cmd("ip -br -4 addr show") every 10s status
+  // Where this phone's traffic reaches the internet (through the exit node when one is used).
+  source pub = http("https://ipinfo.io/json") every 5m timeout 10s json
+  source now = clock every 1m
+
+  let hasKey = token != null
+  // What was typed or pasted, with any spaces and line breaks taken out.
+  let clean = join(words(draft), "")
+  let draftError = clean == "" ? "Paste a token first." : ""
+  let looksCloud = startsWith(clean, "nbp_")
+
+  let localIp = local == null || !local.ok ? null : lines(local.out).map(l => words(l)).filter(w => len(w) > 2).map(w => split(w[2], "/")[0]).find(a => split(a, ".")[0] == "100" && num(split(a, ".")[1]) >= 64 && num(split(a, ".")[1]) < 128)
+
+  let apiOk = api != null && api.ok
+  let rejected = hasKey && api != null && (api.code == 401 || api.code == 403)
+  let apiSays = api == null || api.out == null ? "" : api.out.message ?? ""
+  let peers = (apiOk ? api.out : null) ?? []
+  let routes = routeList != null && routeList.ok ? (routeList.out ?? []) : []
+
+  // An exit node is a peer a route sends 0.0.0.0/0 (and ::/0) to; the route's enabled flag is what the
+  // dashboard's exit node switch sets, and what the routes endpoint changes.
+  let exitRoutes = routes.filter(r => r.network == "0.0.0.0/0" || r.network == "::/0")
+  // The routes endpoint takes the whole route back, so flipping one is sending it with enabled changed.
+  let exitPut = exitRoutes.map(r => {
+    id: r.id,
+    peer: r.peer,
+    network: r.network,
+    on: r.enabled == true,
+    body: {
+      description: r.description ?? "",
+      network_id: r.network_id,
+      enabled: r.enabled != true,
+      peer: r.peer,
+      peer_groups: r.peer_groups,
+      network: r.network,
+      metric: r.metric,
+      masquerade: r.masquerade,
+      groups: r.groups ?? [],
+      keep_route: r.keep_route == true,
+      skip_auto_apply: r.skip_auto_apply == true,
+      access_control_groups: r.access_control_groups ?? []
+    }
+  })
+
+  let exitOn = exitPut.count(x => x.on) > 0
+  // Using an exit node, the internet sees that node's public address, which is the one it connects to
+  // management from: the net's exit peer whose connection IP is this phone's egress IP.
+  let exitPeer = pub == null || pub.ip == null || !exitOn ? null : peers.find(d => (d.connection_ip ?? "") == pub.ip && exitPut.count(x => x.peer == d.id && x.on) > 0)
+  let myDev = myId == "" ? null : peers.find(d => d.id == myId)
+  // Without a peer marked by hand, the one the internet sees this phone from is this phone.
+  let autoMe = pub == null || pub.ip == null ? null : peers.find(d => (d.connection_ip ?? "") == pub.ip && (exitPeer == null || d.id != exitPeer.id))
+  let me = myDev ?? autoMe
+
+  let rows = peers.map(d => {
+    id: d.id,
+    name: d.name ?? d.hostname ?? "?",
+    ip: d.ip ?? "",
+    os: join(take(words(d.os ?? ""), 2), " "),
+    version: d.version ?? "",
+    on: d.connected == true,
+    pending: d.approval_required == true && d.connected != true,
+    expired: d.login_expired == true,
+    seen: parseTime(d.last_seen) == null ? "" : fmtAgo(parseTime(d.last_seen), now),
+    mine: d.id == (me == null ? "" : me.id),
+    exitOf: exitPeer != null && d.id == exitPeer.id,
+    exit4: exitPut.find(x => x.peer == d.id && x.network == "0.0.0.0/0"),
+    exit6: exitPut.find(x => x.peer == d.id && x.network == "::/0"),
+    offersExit: exitPut.count(x => x.peer == d.id) > 0,
+    exitOn: exitPut.count(x => x.peer == d.id && x.on) > 0
+  })
+  let vpnOn = localIp != null || (me != null && me.connected == true)
+  let myIp = localIp ?? (me == null ? "" : me.ip ?? "")
+  let needPick = localIp == null && me == null && apiOk
+  let exitLabel = exitPeer == null ? "none" : exitPeer.name ?? "?"
+  let online = peers.count(d => d.connected == true)
+  let place = pub == null || pub.ip == null ? "" : "${pub.ip}  ·  ${pub.city ?? "?"}, ${pub.country ?? "?"}"
+  let problem = !hasKey ? "add a token" : api == null ? null : rejected ? "token rejected" : !api.ok ? "API error ${api.code}" : null
+  let routeMsg = routeRes == null || routeRes.ok ? "" : routeRes.out.message ?? ((routeRes.err ?? "") == "" ? "the API refused it" : routeRes.err)
+
+  onTap: screen()
+
+  component Dot(on) {
+    Spacer { size: 8; radius: 4; background: on ? green : alpha(muted, 0.5) }
+  }
+
+  // The tile packs the same facts tighter as it's resized smaller: one line at a single row, a short list at two.
+  let h = tileHeight ?? 999
+  // Room for one more line: a 3x3 tile has just enough for the address and the exit node.
+  let roomy = h >= 170
+  // A title-sized state needs a wider tile than 3 cells; "connected" is cut to "connect…" there.
+  let wide = (tileWidth ?? 0) >= 460
+  // Secondary text: the theme's muted halfway to the text color, as some themes' muted is too faint to read.
+  let dim = mix(muted, foreground, 0.5)
+  let count = api == null ? "…" : "${online}/${len(peers)}"
+  let stateLabel = vpnOn ? "connected" : needPick ? "which?" : "off"
+
+  if h < 110 {
+    Column {
+      gap: 2
+      fill: true
+      justify: center
+      Row {
+        align: center
+        gap: 8
+        Dot { on: vpnOn }
+        Text { text: stateLabel; style: body; bold: true; color: vpnOn ? green : dim; maxLines: 1; weight: 1 }
+        Text { text: count; style: small; color: dim; maxLines: 1; width: 52; align: end }
+      }
+      Text { text: problem ?? (vpnOn ? "exit ${exitLabel}${pub.city == null ? "" : "  ·  " + pub.city}" : "VPN not running"); style: small; color: problem != null ? (hasKey ? red : yellow) : exitPeer != null ? accent : dim; maxLines: 1; visible: h >= 55 }
+    }
+  } else if h < 230 {
+    Column {
+      gap: 3
+      fill: true
+      Row {
+        align: center
+        gap: 6
+        Text { text: "netbird"; style: muted; color: dim; weight: 1 }
+        if problem == null {
+          Text { text: count; style: small; color: dim; maxLines: 1 }
+        }
+        Dot { on: vpnOn }
+      }
+      // The state, and while the VPN is off, the way to turn it on.
+      Text { text: stateLabel; style: body; bold: true; color: vpnOn ? green : dim; maxLines: 1 }
+      if vpnOn {
+        Text { text: myIp; style: small; font: mono; maxLines: 1 }
+        Text { text: "exit: ${exitLabel}"; style: small; color: exitPeer != null ? accent : dim; maxLines: 1 }
+        Text { text: "${pub.city}, ${pub.country}"; style: small; color: dim; maxLines: 1; visible: roomy && pub.city != null }
+      } else if needPick {
+        Text { text: "tap: mark this phone"; style: small; color: dim; maxLines: 1 }
+      }
+      if problem != null {
+        Text { text: problem; style: small; color: hasKey ? red : yellow; maxLines: 1 }
+      }
+      Spacer { weight: 1 }
+      if !vpnOn && !needPick {
+        Button { text: "turn on"; color: accent; onTap: androidApp("io.netbird.client") }
+      }
+    }
+  } else {
+  Column {
+    gap: 4
+    fill: true
+    Row {
+      align: center
+      Text { text: "netbird"; style: muted; color: dim; weight: 1 }
+      Dot { on: vpnOn }
+    }
+    Text { text: stateLabel; style: wide ? "title" : "body"; bold: true; color: vpnOn ? green : dim; maxLines: 1 }
+    Text { text: vpnOn ? myIp : needPick ? "tap: mark this phone" : "VPN not running"; style: small; font: mono; color: vpnOn ? foreground : dim; maxLines: 1 }
+    if vpnOn {
+      Text { text: "exit: ${exitLabel}"; style: small; color: exitPeer != null ? accent : dim; maxLines: 1 }
+    }
+    Text { text: pub.city == null ? "" : "${pub.city}, ${pub.country}"; style: small; color: dim; maxLines: 1; visible: roomy && pub.city != null }
+    Spacer { weight: 1 }
+    if problem != null {
+      Text { text: problem; style: small; color: hasKey ? red : yellow; maxLines: 1 }
+    } else {
+      Text { text: "${count} online"; style: small; maxLines: 1 }
+    }
+    Button { text: vpnOn || needPick ? "open app" : "turn on"; color: vpnOn || needPick ? dim : accent; onTap: androidApp("io.netbird.client") }
+  }
+  }
+
+  screen {
+    title: "netbird"
+    let dim = mix(muted, foreground, 0.5)
+    Column {
+      gap: 10
+      fill: true
+      Row {
+        align: center
+        gap: 10
+        Dot { on: vpnOn }
+        Column {
+          gap: 0
+          weight: 1
+          Text { text: vpnOn ? "this phone is connected" : needPick ? "which peer is this phone?" : "this phone's VPN is off"; style: body; bold: true }
+          Text { text: vpnOn ? myIp : needPick ? "This phone can't see its own tunnel. Tap \"mine\" on its entry below." : "turn it on in the NetBird app"; style: small; font: mono; color: dim }
+        }
+        Button { text: "open app"; onTap: androidApp("io.netbird.client") }
+      }
+      Column {
+        gap: 4
+        Row {
+          Text { text: "exit node"; style: small; color: dim; width: 90 }
+          Text { text: !vpnOn && !needPick ? "—" : exitPeer != null ? exitPeer.name ?? "?" : exitOn ? "none in use" : routeList == null || !routeList.ok ? "—" : "none"; style: small; font: mono; color: exitPeer != null ? accent : foreground; maxLines: 1; weight: 1 }
+        }
+        Row {
+          Text { text: "public IP"; style: small; color: dim; width: 90 }
+          Text { text: place != "" ? place : "…"; style: small; font: mono; maxLines: 1; weight: 1 }
+        }
+        Row {
+          Text { text: "network"; style: small; color: dim; width: 90 }
+          Text { text: pub.org ?? "…"; style: small; font: mono; maxLines: 1; weight: 1 }
+        }
+      }
+      Spacer { height: 1; fill: width; background: alpha(muted, 0.25) }
+
+      if !hasKey || rejected {
+        if rejected {
+          Text { text: "NetBird rejected the saved token: ${apiSays != "" ? apiSays : "error ${api.code}"}. Tokens expire; create a new one and paste it:"; style: small; color: red }
+        } else {
+          Text { text: "To list your net's peers, create a personal access token (not a setup key) at app.netbird.io → Team → your user (or a service user) → Create token, and paste it here:"; style: small }
+        }
+        Input { placeholder: "nbp_…"; password: true; focus: !hasKey; onChange: { draft = value; keyMsg = "" }; onSubmit: { keyMsg = draftError; if draftError == "" { token = clean }; refresh() } }
+        if keyMsg != "" {
+          Text { text: keyMsg; style: small; color: yellow }
+        }
+        Row {
+          gap: 8
+          Button { text: "save token"; onTap: { keyMsg = draftError; if draftError == "" { token = clean }; refresh() } }
+          Button { text: "create token"; color: dim; onTap: url("https://app.netbird.io/team") }
+        }
+        if clean != "" && !looksCloud {
+          Text { text: "Cloud tokens start with nbp_; a self-hosted net's tokens can look different, and its address goes in place of api.netbird.io in this file."; style: small; color: dim }
+        }
+      } else {
+        Row {
+          align: center
+          Text { text: problem ?? "${online} of ${len(peers)} peers online"; style: muted; color: problem == null ? dim : red; weight: 1 }
+          Button { text: "refresh"; color: dim; onTap: refresh() }
+        }
+        Column {
+          gap: 6
+          weight: 1
+          scroll: true
+          for d in rows.sortBy(d => (d.mine ? "0" : d.on ? "1" : "2") + lower(d.name)) key d.id {
+            Column {
+              gap: 6
+              padding: [10, 8]
+              border: 1
+              borderColor: d.me ? alpha(accent, 0.6) : alpha(muted, 0.3)
+              Row {
+                align: center
+                gap: 10
+                onTap: copy(d.ip)
+                Dot { on: d.on }
+                Column {
+                  gap: 0
+                  weight: 1
+                  Text { text: d.name + (d.mine ? "  (this phone)" : d.exitOf ? "  (exit in use)" : ""); style: body; bold: true; maxLines: 1 }
+                  Text { text: "${d.ip}  ·  ${d.os}"; style: small; font: mono; color: dim; maxLines: 1 }
+                }
+                Text { text: d.on ? "online" : d.pending ? "approval" : d.expired ? "login expired" : d.seen; style: small; color: d.on ? green : d.pending || d.expired ? yellow : dim; width: 96; align: end; maxLines: 2; visible: !d.on }
+                if localIp == null && (me == null || d.id == myId) {
+                  Button { text: d.id == myId ? "not mine" : "mine"; color: dim; onTap: myId = d.id == myId ? "" : d.id }
+                }
+              }
+              if d.offersExit {
+                Row {
+                  align: center
+                  gap: 8
+                  Text { text: busy == d.id ? "exit node: saving…" : d.exitOn ? "exit node: on" : "exit node: off"; style: small; color: d.exitOn ? accent : dim; weight: 1 }
+                  Button {
+                    text: d.exitOn ? "disable" : "enable"
+                    color: d.exitOn ? dim : accent
+                    onTap: {
+                      busy = d.id
+                      routeRes = null
+                      if d.exit4 != null { routeRes = post("https://api.netbird.io/api/routes/${enc(d.exit4.id)}", d.exit4.body, {Authorization: "Token ${token}"}, method: "PUT") }
+                      if d.exit6 != null { routeRes = post("https://api.netbird.io/api/routes/${enc(d.exit6.id)}", d.exit6.body, {Authorization: "Token ${token}"}, method: "PUT") }
+                      busy = ""
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        Text { text: "Couldn't change the exit node: ${routeMsg}"; style: small; color: red; visible: routeMsg != "" }
+        Text { text: "Pick the exit node this phone uses in the NetBird app; here you switch a peer's exit node on or off for the whole net."; style: small; color: dim; visible: routeList != null && routeList.ok && exitPut.count(x => x.peer != null) > 0 }
+        Row {
+          gap: 8
+          Text { text: "tap a peer to copy its IP"; style: small; color: dim; weight: 1 }
+          Button { text: "forget token"; color: red; onTap: token = null }
+        }
+      }
+    }
+  }
+}
