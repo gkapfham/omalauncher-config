@@ -13,7 +13,7 @@ widget "restore" {
     category: "system"
   }
 
-  requires { pacman: ["python", "nodejs", "git", "util-linux"] }
+  requires { pacman: ["python", "nodejs", "git", "util-linux", "zstd", "tar", "fontconfig"] }
 
   source st = file("~/.cache/owl-config/status.json") json
   source bl = file("~/.cache/owl-config/backups.json") json

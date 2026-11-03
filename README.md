@@ -11,6 +11,7 @@ This phone's omalauncher look and its pi setup, kept in git so a reinstall, a ne
 | `omalauncher/style/` | `~/.config/omalauncher/style/` — theme, background, tile spacing, terminal font |
 | `omalauncher/home/layout.toml` | `~/.config/omalauncher/home/` — pages, faces, tiles and where each one sits |
 | `omarchy/themes/`, `omarchy/backgrounds/` | `~/.config/omarchy/` — your own themes and wallpapers (the `vitamin` theme among them) |
+| `fonts.tar.zst` | `~/.local/share/fonts/` — hand-installed fonts, Maple Mono NF among them |
 | `pi/agent/extensions/` | `~/.pi/agent/extensions/` — `swipe-prompt.ts`, which turns what the pi tile's line sends into a prompt |
 | `pi/agent/settings.json`, `keybindings.json`, `open-tui.json`, `themes/` | `~/.pi/agent/` |
 | `AGENTS.md` | `~/AGENTS.md` — what pi reads about this phone |
@@ -46,6 +47,15 @@ account.
 To restore, download the newest `.tar.gz` from Drive, extract it in `~` (it expands to `~/omalauncher-config/`), then run
 `~/omalauncher-config/restore.sh`. The archive holds no tokens or API keys; sign in again with
 `owl-agenda login --email you@example.com` if the agenda needs it.
+
+## Fonts
+
+The style's `Maple Mono NF` and the terminal's `Maple Mono NF:style=SemiBold` are not a pacman package: they are the
+TTFs in `~/.local/share/fonts/maple-mono-nf`. `save.sh` packs that whole folder into `fonts.tar.zst` (the 37 MB of TTFs
+come to about 2.5 MB with zstd), so every backup carries it. `restore.sh` extracts it, then runs `fc-cache -f`; that is
+why the font survives a new phone. Add another font to `~/.local/share/fonts` and the next save includes it too.
+
+The restore snapshot includes the fonts as well, so **undo last restore** puts back the font you had before the restore.
 
 ## Backup & restore from the launcher
 

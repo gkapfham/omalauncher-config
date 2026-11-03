@@ -9,7 +9,7 @@ app "backup" {
     category: "system"
   }
 
-  requires { pacman: ["python", "nodejs", "git", "util-linux"] }
+  requires { pacman: ["python", "nodejs", "git", "util-linux", "zstd", "tar", "fontconfig"] }
 
   title: "backup & restore"
 

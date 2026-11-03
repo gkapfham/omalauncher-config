@@ -31,6 +31,14 @@ mkdir -p omarchy
 if [ -d "$HOME"/.config/omarchy/themes ]; then cp -Rp "$HOME"/.config/omarchy/themes omarchy/themes; fi
 if [ -d "$HOME"/.config/omarchy/backgrounds ]; then cp -Rp "$HOME"/.config/omarchy/backgrounds omarchy/backgrounds; fi
 
+# Hand-installed fonts (Maple Mono NF among them): TTF compresses well with zstd,
+# so the whole family fits in every backup. restore.sh puts it back and runs fc-cache.
+if [ -d "$HOME"/.local/share/fonts ]; then
+  tar -C "$HOME"/.local/share -cf - fonts | zstd -q -T0 -19 -o fonts.tar.zst
+else
+  rm -f fonts.tar.zst
+fi
+
 # pi: extensions (the swipe prompt inbox among them), settings, keybindings, themes.
 mkdir -p pi/agent/extensions pi/agent/themes
 if [ -d "$pi"/extensions ]; then cp -Rp "$pi"/extensions/. pi/agent/extensions/; fi

@@ -22,6 +22,7 @@ for f in settings.json keybindings.json open-tui.json; do
   if [ -f "$pi/$f" ]; then cp -p "$pi/$f" "$aside"/; fi
 done
 if [ -d "$pi"/extensions ]; then cp -a "$pi"/extensions "$aside"/pi-extensions; fi
+if [ -d "$HOME"/.local/share/fonts ]; then cp -a "$HOME"/.local/share/fonts "$aside"/fonts; fi
 echo "What was here is set aside in $aside"
 
 if ls omalauncher/widgets/*.owl >/dev/null 2>&1; then cp -p omalauncher/widgets/*.owl "$cfg"/widgets/; fi
@@ -32,6 +33,13 @@ if [ -f omalauncher/agent ]; then cp -p omalauncher/agent "$cfg"/; fi
 mkdir -p "$HOME"/.config/omarchy
 if [ -d omarchy/themes ]; then cp -Rp omarchy/themes "$HOME"/.config/omarchy/; fi
 if [ -d omarchy/backgrounds ]; then cp -Rp omarchy/backgrounds "$HOME"/.config/omarchy/; fi
+
+# The fonts the style and terminal use. fc-cache makes them visible to the launcher.
+if [ -f fonts.tar.zst ]; then
+  zstd -t fonts.tar.zst >/dev/null 2>&1 || { echo "fonts.tar.zst is corrupt" >&2; exit 1; }
+  zstd -q -dc fonts.tar.zst | tar -C "$HOME"/.local/share -xf -
+  fc-cache -f "$HOME"/.local/share/fonts >/dev/null 2>&1 || true
+fi
 
 if [ -d pi/agent/extensions ]; then cp -Rp pi/agent/extensions/. "$pi"/extensions/; fi
 for f in settings.json keybindings.json open-tui.json; do

@@ -181,6 +181,15 @@ def preflight(repo):
         except Exception as error:  # noqa: BLE001
             problems.append(f"{defaults.relative_to(repo)}: {error}")
 
+    fonts = repo / "fonts.tar.zst"
+    if fonts.is_file():
+        if not shutil.which("zstd"):
+            problems.append("fonts.tar.zst needs zstd, which isn't installed")
+        else:
+            done = subprocess.run(["zstd", "-t", str(fonts)], capture_output=True, text=True)
+            if done.returncode != 0:
+                problems.append("fonts.tar.zst is corrupt")
+
     widgets = repo / "omalauncher/widgets"
     if not widgets.is_dir():
         problems.append("missing omalauncher/widgets")
@@ -248,6 +257,8 @@ def snapshot_current(label):
     shutil.copytree(HOME / ".config/omalauncher", destination / "omalauncher", symlinks=True)
     if (HOME / ".config/omarchy").is_dir():
         shutil.copytree(HOME / ".config/omarchy", destination / "omarchy", symlinks=True)
+    if (HOME / ".local/share/fonts").is_dir():
+        shutil.copytree(HOME / ".local/share/fonts", destination / "fonts", symlinks=True)
 
     pi = HOME / ".pi/agent"
     for name in ("settings.json", "keybindings.json", "open-tui.json"):
@@ -277,6 +288,14 @@ def apply_snapshot(snapshot):
     omarchy = HOME / ".config/omarchy"
     if (snapshot / "omarchy").is_dir():
         replace_tree(snapshot / "omarchy", omarchy)
+
+    fonts = HOME / ".local/share/fonts"
+    if (snapshot / "fonts").is_dir():
+        replace_tree(snapshot / "fonts", fonts)
+    elif fonts.is_dir():
+        shutil.rmtree(fonts)
+    if fonts.is_dir() and shutil.which("fc-cache"):
+        subprocess.run(["fc-cache", "-f", str(fonts)], capture_output=True, timeout=120)
 
     pi = HOME / ".pi/agent"
     for name in ("settings.json", "keybindings.json", "open-tui.json"):
@@ -361,7 +380,9 @@ def check(wanted):
             print("  - " + problem)
         print("nothing was changed")
         return 1
-    print(f"checked {target['name']}: {count} widget files, layout and style parse; nothing was changed")
+    has_fonts = (repo / "fonts.tar.zst").is_file()
+    font_note = "fonts bundle included" if has_fonts else "no font bundle (older backup)"
+    print(f"checked {target['name']}: {count} widget files, layout and style parse, {font_note}; nothing was changed")
     return 0
 
 
@@ -397,9 +418,11 @@ def restore(wanted, dry_run=False):
             problems, count = preflight(repo)
             if problems:
                 raise RuntimeError("; ".join(problems))
+            has_fonts = (repo / "fonts.tar.zst").is_file()
 
             if dry_run:
-                print(f"checked {target['name']}: {count} widget files look valid; nothing was changed")
+                font_note = "fonts bundle included" if has_fonts else "no font bundle"
+                print(f"checked {target['name']}: {count} widget files look valid, {font_note}; nothing was changed")
                 return 0
 
             note("restoring", "checking the widgets here now…", link=target.get("link"), name=target["name"])
@@ -447,6 +470,8 @@ def restore(wanted, dry_run=False):
         return 1
 
     message = f"restored {target['name']}; {checked} widgets compile"
+    if has_fonts:
+        message += "; fonts restored"
     if after_failures:
         message += f"; {len(after_failures)} had errors before too"
     write_status(
