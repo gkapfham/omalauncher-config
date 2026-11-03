@@ -27,6 +27,6 @@ tiles = [
 
 [[page]]
 tiles = [
-  { widget = "backup-tile.owl", x = 0, y = 0, w = 3, h = 3 },
-  { widget = "restore-tile.owl", x = 3, y = 0, w = 3, h = 3 },
+  { widget = "backup-tile.owl", x = 0, y = 0, w = 5, h = 3 },
+  { widget = "restore-tile.owl", x = 0, y = 3, w = 5, h = 3 },
 ]
