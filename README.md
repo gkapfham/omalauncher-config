@@ -56,13 +56,29 @@ aside under `~/.local/share/omalauncher-restored/` before anything is replaced.
 `backup-tile.owl` puts it on home: a 3×3 tile with the last backup and a **back up** button; tap the tile for the same
 saved-setups list and restore buttons.
 
+`restore-tile.owl` is next to it: the newest saved setup and a **restore** button; tap the tile for all saved setups,
+**undo last restore**, and **check newest**. Restoring snapshots the current setup whole first, then applies the backup,
+then runs `owl-check` on every restored file. If a file that compiled before no longer does, the snapshot is put back
+automatically. **Undo last restore** does the same by hand. Snapshots live in `~/.local/share/omalauncher-restored/`.
+
+**Check before restoring:** `check` downloads and validates a backup without touching the live setup:
+
+```sh
+owl-config check latest
+```
+
+It checks the archive, parses the layout and style TOML, and checks that every file the layout names exists. Full OWL
+compilation happens after applying, which is why a failed restore rolls itself back.
+
 The same thing from a terminal:
 
 ```sh
 owl-config save "before changing the home layout"
 owl-config list
+owl-config check latest                  # download, validate, change nothing
 owl-config restore latest
 owl-config restore <id|name> --dry-run   # download and check, change nothing
+owl-config undo                          # put back the pre-restore snapshot
 owl-config status
 ```
 

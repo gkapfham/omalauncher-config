@@ -1,7 +1,7 @@
 widget "backup" {
   // A home tile for backups: tap back up to save and upload, tap the tile for the saved setups.
-  page: 3
-  order: 9
+  page: 4
+  order: 1
   size: 3x3
   minSize: 3x2
 

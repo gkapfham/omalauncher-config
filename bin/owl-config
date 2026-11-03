@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
-"""Back up and restore this phone's omalauncher setup.
+"""Back up, restore and verify this phone's omalauncher setup.
 
-The backup lives in Google Drive -> omalauncher-backups, made from the git
-repository in ~/omalauncher-config. Run by hand or by backup.owl:
+The backups live in Google Drive -> omalauncher-backups, made from the git
+repository in ~/omalauncher-config. Run by hand, by backup.owl or by
+restore-tile.owl:
 
     owl-config save [message]      save + upload, keeping the newest 10
     owl-config list                refresh the cached list of backups
-    owl-config restore latest      download the newest and apply it
-    owl-config restore <id|name> [--dry-run]
+    owl-config check [latest]      download and validate one, change nothing
+    owl-config restore [latest]    apply one, with a full snapshot first
+    owl-config undo                put back what was here before the last restore
     owl-config status              what the last run said
 
-Applying a backup sets the current files aside first, under
-~/.local/share/omalauncher-restored/, by restore.sh.
+A restore never trusts the backup blindly:
+
+  * the archive, its TOML and its widget list are checked before anything is
+    changed;
+  * the current setup is snapshotted whole (widgets, style, home, themes,
+    backgrounds, pi settings, the CLI) before applying;
+  * every restored widget is run through owl-check; if one that compiled
+    before no longer does, the snapshot is put back automatically;
+  * `undo` puts the snapshot back by hand too.
+
+The snapshot lives under ~/.local/share/omalauncher-restored/.
 """
 import fcntl
 import json
@@ -23,6 +34,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import tomllib
 from pathlib import Path
 
 HOME = Path.home()
@@ -34,6 +46,9 @@ LOCK = CACHE / "lock"
 LOG = CACHE / "log.txt"
 AUTH = HOME / ".pi/agent/skills/google-workspace/scripts/auth.js"
 NODE = shutil.which("node") or "node"
+ASIDES = HOME / ".local/share/omalauncher-restored"
+LATEST = ASIDES / "latest"
+WIDGET_TYPES = ("widget", "face", "app", "panel", "keybar")
 
 
 def ensure_cache():
@@ -112,6 +127,198 @@ def find_backup(backups, wanted):
     return None
 
 
+def download(target, folder):
+    """Download and unpack one backup; return the extracted repository."""
+    archive = Path(folder) / target["name"]
+    done = run_logged(
+        [NODE, str(REPO / "drive.js"), "download", target["id"], str(archive), account()],
+        timeout=300,
+    )
+    if done.returncode != 0 or not archive.is_file():
+        raise RuntimeError(last_line(done.stderr) or "the download failed")
+
+    with tarfile.open(archive, "r:gz") as tar:
+        names = tar.getnames()
+        if not any(name.endswith("restore.sh") for name in names):
+            raise RuntimeError("that file isn't an omalauncher backup")
+        tar.extractall(folder, filter="data")
+
+    extracted = Path(folder) / "omalauncher-config"
+    if not (extracted / "restore.sh").is_file():
+        raise RuntimeError("the backup has no restore.sh")
+    return extracted
+
+
+def first_word(path):
+    for line in path.read_text(errors="replace").splitlines():
+        text = line.strip()
+        if text and not text.startswith("//"):
+            return text.split()[0]
+    return ""
+
+
+def preflight(repo):
+    """Check the parts of a backup that can be checked without loading it."""
+    problems = []
+    paths = {
+        "style": repo / "omalauncher/style/style.toml",
+        "layout": repo / "omalauncher/home/layout.toml",
+    }
+    parsed = {}
+    for name, path in paths.items():
+        if not path.is_file():
+            problems.append(f"missing {path.relative_to(repo)}")
+            continue
+        try:
+            parsed[name] = tomllib.loads(path.read_text())
+        except Exception as error:  # noqa: BLE001 - report the parser's own message
+            problems.append(f"{path.relative_to(repo)}: {error}")
+    # Older backups may not have it; the launcher writes it again on its own.
+    defaults = repo / "omalauncher/style/defaults.toml"
+    if defaults.is_file():
+        try:
+            tomllib.loads(defaults.read_text())
+        except Exception as error:  # noqa: BLE001
+            problems.append(f"{defaults.relative_to(repo)}: {error}")
+
+    widgets = repo / "omalauncher/widgets"
+    if not widgets.is_dir():
+        problems.append("missing omalauncher/widgets")
+        return problems, 0
+
+    layout = parsed.get("layout") or {}
+    for page in layout.get("page", []):
+        face = page.get("face")
+        if face and not (widgets / face).is_file() and not (HOME / ".config/omalauncher/widgets" / face).is_file():
+            problems.append(f"layout refers to {face}, which the backup lacks")
+        for tile in page.get("tiles", []):
+            wanted = tile.get("widget")
+            if wanted and not (widgets / wanted).is_file() and not (HOME / ".config/omalauncher/widgets" / wanted).is_file():
+                problems.append(f"layout refers to {wanted}, which the backup lacks")
+
+    count = 0
+    for path in sorted(widgets.glob("*.owl")):
+        count += 1
+        kind = first_word(path)
+        if kind not in WIDGET_TYPES:
+            problems.append(f"{path.name}: starts with '{kind}', not widget/face/app/panel/keybar")
+    if count == 0:
+        problems.append("no widget files in the backup")
+    return problems, count
+
+
+def check_live():
+    """Compile every live widget; runtime warnings count, compile errors don't."""
+    widgets = HOME / ".config/omalauncher/widgets"
+    checked = 0
+    failures = {}
+    for path in sorted(widgets.glob("*.owl")):
+        if path.name.startswith(".stock-"):
+            continue
+        checked += 1
+        try:
+            done = subprocess.run(["owl-check", str(path)], capture_output=True, text=True, timeout=180)
+        except Exception as error:  # noqa: BLE001
+            failures[path.name] = str(error)
+            continue
+        output = (done.stdout or "") + "\n" + (done.stderr or "")
+        if "doesn't compile" in output or "compiles" not in output:
+            failures[path.name] = last_line(output) or f"exit {done.returncode}"
+    return checked, failures
+
+
+def replace_tree(source, target):
+    temporary = target.with_name(target.name + ".owl-restore-tmp")
+    if temporary.exists():
+        shutil.rmtree(temporary)
+    shutil.copytree(source, temporary, symlinks=True)
+    if target.exists():
+        shutil.rmtree(target)
+    os.replace(temporary, target)
+
+
+def snapshot_current(label):
+    """Keep everything a restore can change, whole, so it can be put back."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    destination = ASIDES / f"{label}-{stamp}"
+    if destination.exists():
+        destination = ASIDES / f"{label}-{stamp}-{os.getpid()}"
+    destination.mkdir(parents=True, exist_ok=False)
+
+    shutil.copytree(HOME / ".config/omalauncher", destination / "omalauncher", symlinks=True)
+    if (HOME / ".config/omarchy").is_dir():
+        shutil.copytree(HOME / ".config/omarchy", destination / "omarchy", symlinks=True)
+
+    pi = HOME / ".pi/agent"
+    for name in ("settings.json", "keybindings.json", "open-tui.json"):
+        source = pi / name
+        if source.is_file():
+            shutil.copy2(source, destination / name)
+    if (pi / "extensions").is_dir():
+        shutil.copytree(pi / "extensions", destination / "pi-extensions", symlinks=True)
+    if (pi / "themes").is_dir():
+        shutil.copytree(pi / "themes", destination / "pi-themes", symlinks=True)
+
+    for name in ("owl-config", "owl-agenda"):
+        source = HOME / ".local/bin" / name
+        if source.is_file():
+            (destination / "bin").mkdir(exist_ok=True)
+            shutil.copy2(source, destination / "bin" / name)
+    if (HOME / "AGENTS.md").is_file():
+        shutil.copy2(HOME / "AGENTS.md", destination / "AGENTS.md")
+    return destination
+
+
+def apply_snapshot(snapshot):
+    """Put a snapshot back; returns nothing, raises on failure."""
+    config = HOME / ".config/omalauncher"
+    replace_tree(snapshot / "omalauncher", config)
+
+    omarchy = HOME / ".config/omarchy"
+    if (snapshot / "omarchy").is_dir():
+        replace_tree(snapshot / "omarchy", omarchy)
+
+    pi = HOME / ".pi/agent"
+    for name in ("settings.json", "keybindings.json", "open-tui.json"):
+        source = snapshot / name
+        if source.is_file():
+            shutil.copy2(source, pi / name)
+    if (snapshot / "pi-extensions").is_dir():
+        replace_tree(snapshot / "pi-extensions", pi / "extensions")
+    if (snapshot / "pi-themes").is_dir():
+        replace_tree(snapshot / "pi-themes", pi / "themes")
+
+    for name in ("owl-config", "owl-agenda"):
+        source = snapshot / "bin" / name
+        if source.is_file():
+            destination = HOME / ".local/bin" / name
+            shutil.copy2(source, destination)
+            destination.chmod(destination.stat().st_mode | 0o111)
+    if (snapshot / "AGENTS.md").is_file():
+        shutil.copy2(snapshot / "AGENTS.md", HOME / "AGENTS.md")
+
+
+def set_latest(snapshot):
+    ASIDES.mkdir(parents=True, exist_ok=True)
+    if LATEST.is_symlink() or LATEST.is_file():
+        LATEST.unlink()
+    elif LATEST.is_dir():
+        shutil.rmtree(LATEST)
+    LATEST.symlink_to(snapshot.resolve())
+
+
+def latest_aside():
+    if LATEST.is_symlink() or LATEST.is_file():
+        target = LATEST.resolve()
+        return target if target.is_dir() else None
+    if LATEST.is_dir():
+        return LATEST
+    candidates = sorted(
+        path for path in ASIDES.glob("before-*") if path.is_dir()
+    ) if ASIDES.is_dir() else []
+    return candidates[-1] if candidates else None
+
+
 def save(message):
     write_status("saving", "saving the setup…")
     try:
@@ -129,12 +336,37 @@ def save(message):
         "backed up " + (newest["name"] if newest else "the setup"),
         link=newest.get("link") if newest else None,
         name=newest.get("name") if newest else None,
+        undo=latest_aside() is not None,
     )
     return 0
 
 
+def check(wanted):
+    """Download one backup and validate it; nothing live is touched."""
+    backups = list_backups()
+    target = find_backup(backups, wanted)
+    if target is None:
+        print(f"no backup named {wanted}", file=sys.stderr)
+        return 1
+    try:
+        with tempfile.TemporaryDirectory(prefix="owl-config-") as folder:
+            repo = download(target, folder)
+            problems, count = preflight(repo)
+    except Exception as error:  # noqa: BLE001
+        print(str(error), file=sys.stderr)
+        return 1
+    if problems:
+        print(f"checked {target['name']}: {len(problems)} problem(s) found")
+        for problem in problems:
+            print("  - " + problem)
+        print("nothing was changed")
+        return 1
+    print(f"checked {target['name']}: {count} widget files, layout and style parse; nothing was changed")
+    return 0
+
+
 def restore(wanted, dry_run=False):
-    # A dry run is a check, not a backup: leave the status the app shows alone.
+    # A dry run / check is not a restore: leave the status the app shows alone.
     def note(state, message, **extra):
         if not dry_run:
             write_status(state, message, **extra)
@@ -160,33 +392,53 @@ def restore(wanted, dry_run=False):
     note("restoring", f"downloading {target['name']}…", link=target.get("link"), name=target["name"])
     try:
         with tempfile.TemporaryDirectory(prefix="owl-config-") as folder:
-            archive = Path(folder) / target["name"]
-            done = run_logged(
-                [NODE, str(REPO / "drive.js"), "download", target["id"], str(archive), account()],
-                timeout=300,
-            )
-            if done.returncode != 0 or not archive.is_file():
-                raise RuntimeError(last_line(done.stderr) or "the download failed")
-
-            with tarfile.open(archive, "r:gz") as tar:
-                names = tar.getnames()
-                if not any(name.endswith("restore.sh") for name in names):
-                    raise RuntimeError("that file isn't an omalauncher backup")
-                tar.extractall(folder, filter="data")
-
-            extracted = Path(folder) / "omalauncher-config"
-            script = extracted / "restore.sh"
-            if not script.is_file():
-                raise RuntimeError("the backup has no restore.sh")
+            repo = download(target, folder)
+            note("restoring", f"checking {target['name']}…", link=target.get("link"), name=target["name"])
+            problems, count = preflight(repo)
+            if problems:
+                raise RuntimeError("; ".join(problems))
 
             if dry_run:
-                print(f"checked {target['name']}; nothing was changed")
+                print(f"checked {target['name']}: {count} widget files look valid; nothing was changed")
                 return 0
 
-            write_status("restoring", f"applying {target['name']}…", link=target.get("link"), name=target["name"])
-            done = run_logged(["sh", str(script)], timeout=900)
+            note("restoring", "checking the widgets here now…", link=target.get("link"), name=target["name"])
+            _, before_failures = check_live()
+
+            note("restoring", "snapshotting the current setup…", link=target.get("link"), name=target["name"])
+            snapshot = snapshot_current("before-restore")
+            set_latest(snapshot)
+
+            note("restoring", f"applying {target['name']}…", link=target.get("link"), name=target["name"])
+            done = run_logged(["sh", str(repo / "restore.sh")], timeout=900)
             if done.returncode != 0:
-                raise RuntimeError(last_line(done.stderr) or last_line(done.stdout) or "restore.sh failed")
+                apply_snapshot(snapshot)
+                if LATEST.is_symlink() or LATEST.is_file():
+                    LATEST.unlink()
+                raise RuntimeError(
+                    (last_line(done.stderr) or last_line(done.stdout) or "restore.sh failed")
+                    + "; the previous setup was put back"
+                )
+
+            note("restoring", "checking the restored widgets…", link=target.get("link"), name=target["name"])
+            checked, after_failures = check_live()
+            new_failures = {
+                name: reason for name, reason in after_failures.items() if name not in before_failures
+            }
+            if new_failures:
+                names = ", ".join(sorted(new_failures))
+                apply_snapshot(snapshot)
+                if LATEST.is_symlink() or LATEST.is_file():
+                    LATEST.unlink()
+                raise RuntimeError(f"{names} doesn't compile; put the previous setup back")
+
+            # An older backup carries an older owl-config; keep this one, so undo and
+            # the pre-flight checks stay available after the restore.
+            keep_cli = snapshot / "bin" / "owl-config"
+            if keep_cli.is_file():
+                live_cli = HOME / ".local/bin/owl-config"
+                shutil.copy2(keep_cli, live_cli)
+                live_cli.chmod(live_cli.stat().st_mode | 0o111)
     except Exception as error:  # noqa: BLE001
         if dry_run:
             print(str(error), file=sys.stderr)
@@ -194,12 +446,42 @@ def restore(wanted, dry_run=False):
             write_status("error", str(error))
         return 1
 
+    message = f"restored {target['name']}; {checked} widgets compile"
+    if after_failures:
+        message += f"; {len(after_failures)} had errors before too"
     write_status(
         "ok",
-        f"restored {target['name']}; the previous setup was set aside",
+        message,
         link=target.get("link"),
         name=target["name"],
+        undo=True,
+        aside=str(snapshot),
     )
+    return 0
+
+
+def undo():
+    snapshot = latest_aside()
+    if snapshot is None:
+        write_status("error", "nothing to undo: no restore snapshot is left")
+        return 1
+    write_status("restoring", "putting the previous setup back…")
+    try:
+        if not (snapshot / "omalauncher").is_dir():
+            raise RuntimeError(f"the snapshot at {snapshot} is incomplete")
+        snapshot_current("undo")
+        apply_snapshot(snapshot)
+        if LATEST.is_symlink() or LATEST.is_file():
+            LATEST.unlink()
+        checked, failures = check_live()
+    except Exception as error:  # noqa: BLE001
+        write_status("error", f"undo failed: {error}")
+        return 1
+    if failures:
+        names = ", ".join(sorted(failures))
+        write_status("error", f"undone, but {names} doesn't compile", undo=False)
+        return 1
+    write_status("ok", f"undid the last restore; {checked} widgets compile", undo=False)
     return 0
 
 
@@ -219,8 +501,16 @@ def main():
             print(str(error), file=sys.stderr)
             return 1
 
-    if command not in ("save", "restore"):
-        print("usage: owl-config save [message] | list | restore <latest|id|name> [--dry-run] | status", file=sys.stderr)
+    if command == "check":
+        wanted = sys.argv[2] if len(sys.argv) > 2 else "latest"
+        return check(wanted)
+
+    if command not in ("save", "restore", "undo"):
+        print(
+            "usage: owl-config save [message] | list | check [latest|id|name] | "
+            "restore <latest|id|name> [--dry-run] | undo | status",
+            file=sys.stderr,
+        )
         return 2
 
     handle = LOCK.open("w")
@@ -233,6 +523,8 @@ def main():
     if command == "save":
         message = " ".join(sys.argv[2:]).strip() or time.strftime("backup %Y-%m-%d %H:%M")
         return save(message)
+    if command == "undo":
+        return undo()
 
     arguments = [arg for arg in sys.argv[2:] if arg != "--dry-run"]
     if not arguments:
