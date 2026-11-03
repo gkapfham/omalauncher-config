@@ -158,14 +158,18 @@ panel "app drawer" {
     }
   }
 
+  // Apps whose icon is a full-bleed square with an opaque background: monochrome tint floods the whole square with
+  // the accent, so they show their initials on a badge instead, as an app without an icon does. Add a key to the list
+  // to give another app the same treatment.
+  let initialsOnly = ["a:com.philips.hearlink2/crc641d37fc9d5495f985.MainActivity"]
   // An app's icon as the drawer draws it: its own, its silhouette on a badge with monochrome icons, or its initials.
   component AppIcon(a) {
     Box {
       size: 40
       align: center
       radius: 20 * corners
-      background: a.hasIcon && !d.monochrome ? transparent : surface
-      if a.hasIcon {
+      background: a.hasIcon && !d.monochrome && !any(initialsOnly, k => k == a.key) ? transparent : surface
+      if a.hasIcon && !any(initialsOnly, k => k == a.key) {
         Image { src: a.icon; size: d.monochrome ? 28 : 40; tint: d.monochrome ? accent : null; label: a.label }
       } else {
         Text { text: a.initials; fontSize: 15; color: accent }

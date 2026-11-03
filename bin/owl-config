@@ -371,6 +371,7 @@ def check(wanted):
         with tempfile.TemporaryDirectory(prefix="owl-config-") as folder:
             repo = download(target, folder)
             problems, count = preflight(repo)
+            has_fonts = (repo / "fonts.tar.zst").is_file()
     except Exception as error:  # noqa: BLE001
         print(str(error), file=sys.stderr)
         return 1
@@ -380,7 +381,6 @@ def check(wanted):
             print("  - " + problem)
         print("nothing was changed")
         return 1
-    has_fonts = (repo / "fonts.tar.zst").is_file()
     font_note = "fonts bundle included" if has_fonts else "no font bundle (older backup)"
     print(f"checked {target['name']}: {count} widget files, layout and style parse, {font_note}; nothing was changed")
     return 0
