@@ -16,6 +16,7 @@ panel "app drawer" {
       open: "open"; ask: "ask"; askInstallLinux: "ask an agent · install linux"; askInstallAgent: "ask an agent · install one"
       askAgent: (bin, text) => "ask ${bin}: ${text}"
       hide: "hide"; unhide: "unhide"; hiddenApps: "hidden apps"
+      icon: "icon"; ownIcon: "own icon"; initialsIcon: "initials"; typeIcon: "character or emoji…"; iconFile: "svg or png in this system…"; borrowIcon: "or another app's icon"; cancel: "cancel"
       rename: "rename"; addToFolder: "add to folder"; removeFromFolder: "remove from folder"; newFolder: "new folder…"; deleteFolder: "delete folder"
     }
     id {
@@ -26,6 +27,7 @@ panel "app drawer" {
       open: "buka"; ask: "tanya"; askInstallLinux: "tanya agen · instal linux"; askInstallAgent: "tanya agen · instal satu"
       askAgent: (bin, text) => "tanya ${bin}: ${text}"
       hide: "sembunyikan"; unhide: "tampilkan lagi"; hiddenApps: "aplikasi tersembunyi"
+      icon: "ikon"; ownIcon: "ikon sendiri"; initialsIcon: "inisial"; typeIcon: "karakter atau emoji…"; iconFile: "svg atau png di sistem ini…"; borrowIcon: "atau ikon aplikasi lain"; cancel: "batal"
       rename: "ganti nama"; addToFolder: "tambah ke folder"; removeFromFolder: "hapus dari folder"; newFolder: "folder baru…"; deleteFolder: "hapus folder"
     }
     es {
@@ -36,6 +38,7 @@ panel "app drawer" {
       open: "abrir"; ask: "preguntar"; askInstallLinux: "preguntar a un agente · instalar linux"; askInstallAgent: "preguntar a un agente · instalar uno"
       askAgent: (bin, text) => "preguntar a ${bin}: ${text}"
       hide: "ocultar"; unhide: "mostrar"; hiddenApps: "apps ocultas"
+      icon: "icono"; ownIcon: "icono propio"; initialsIcon: "iniciales"; typeIcon: "carácter o emoji…"; iconFile: "svg o png en este sistema…"; borrowIcon: "o el icono de otra app"; cancel: "cancelar"
       rename: "renombrar"; addToFolder: "añadir a carpeta"; removeFromFolder: "quitar de la carpeta"; newFolder: "carpeta nueva…"; deleteFolder: "eliminar carpeta"
     }
     pt {
@@ -46,6 +49,7 @@ panel "app drawer" {
       open: "abrir"; ask: "perguntar"; askInstallLinux: "perguntar a um agente · instalar linux"; askInstallAgent: "perguntar a um agente · instalar um"
       askAgent: (bin, text) => "perguntar ao ${bin}: ${text}"
       hide: "ocultar"; unhide: "mostrar"; hiddenApps: "apps ocultos"
+      icon: "ícone"; ownIcon: "ícone próprio"; initialsIcon: "iniciais"; typeIcon: "caractere ou emoji…"; iconFile: "svg ou png neste sistema…"; borrowIcon: "ou o ícone de outro app"; cancel: "cancelar"
       rename: "renomear"; addToFolder: "adicionar à pasta"; removeFromFolder: "remover da pasta"; newFolder: "nova pasta…"; deleteFolder: "excluir pasta"
     }
     de {
@@ -56,6 +60,7 @@ panel "app drawer" {
       open: "öffnen"; ask: "fragen"; askInstallLinux: "einen agenten fragen · linux installieren"; askInstallAgent: "einen agenten fragen · einen installieren"
       askAgent: (bin, text) => "${bin} fragen: ${text}"
       hide: "ausblenden"; unhide: "einblenden"; hiddenApps: "ausgeblendete apps"
+      icon: "symbol"; ownIcon: "eigenes symbol"; initialsIcon: "initialen"; typeIcon: "zeichen oder emoji…"; iconFile: "svg oder png in diesem system…"; borrowIcon: "oder das symbol einer anderen app"; cancel: "abbrechen"
       rename: "umbenennen"; addToFolder: "zu ordner hinzufügen"; removeFromFolder: "aus ordner entfernen"; newFolder: "neuer ordner…"; deleteFolder: "ordner löschen"
     }
     zh {
@@ -66,6 +71,7 @@ panel "app drawer" {
       open: "打开"; ask: "提问"; askInstallLinux: "问智能体 · 安装 linux"; askInstallAgent: "问智能体 · 先装一个"
       askAgent: (bin, text) => "问 ${bin}：${text}"
       hide: "隐藏"; unhide: "取消隐藏"; hiddenApps: "已隐藏的应用"
+      icon: "图标"; ownIcon: "应用自带图标"; initialsIcon: "首字母"; typeIcon: "字符或表情…"; iconFile: "本机的 svg 或 png…"; borrowIcon: "或其他应用的图标"; cancel: "取消"
       rename: "重命名"; addToFolder: "添加到文件夹"; removeFromFolder: "从文件夹移除"; newFolder: "新建文件夹…"; deleteFolder: "删除文件夹"
     }
   }
@@ -83,6 +89,11 @@ panel "app drawer" {
   // The folders apps are grouped into, each name's list of app keys; long-press › add to folder puts one in,
   // long-press on a folder's title deletes it (its apps come back to the list).
   state folders = {} persist
+  // The icon each app shows instead of its own, by key: {kind, value}, with kind "app" (another app's icon, its key
+  // in value), "text" (a character or emoji), "file" (an svg or png in this system) or "initials"; no entry, its own.
+  state icons = {} persist
+  // The app whose icon picker is open, by key, "" while it's closed.
+  state iconPicking = ""
   // The app being renamed or picked a folder for, by key, "" while neither, and the folder whose title menu is open.
   state renaming = ""
   state picking = ""
@@ -94,6 +105,10 @@ panel "app drawer" {
   let cols = 1
   let typed = trim(query)
   let searching = typed != ""
+  // The app the icon picker is for, and the apps whose icons it offers, filtered by what's typed in the bar.
+  let iconPickingName = find(d.apps, x => x.key == iconPicking) ?? {name: ""}
+  let borrowApps = (searching ? rank(d.apps, typed) : d.apps).filter(a => a.key != iconPicking)
+  let borrowRows = chunk(borrowApps, 5).map((cells, r) => {key: "i:" + r, cells: cells})
   // A renamed app shows its given name and searches by it, its own name kept as an alias.
   let renamedAll = d.apps.map(a => merge(a, {name: get(names, a.key, a.name), alias: get(names, a.key, a.name) == a.name ? a.alias : a.name}))
   // Hidden apps leave the list (and search) until they're unhidden from the section at its end;
@@ -132,7 +147,7 @@ panel "app drawer" {
   let agent = ag.default
   // With a keyboard: Up and Tab move the pick away from the bar, Down and Shift+Tab back; the ask row sits lowest.
   onKey: {
-    if searching {
+    if searching && iconPicking == "" {
       pick = clamp(chosen + (value == "up" || value == "tab" ? 1 : -1), -1, len(hits) - 1)
     }
   }
@@ -144,10 +159,10 @@ panel "app drawer" {
   opacity: 0.97
   // Leave the keyboard down as the drawer opens; tapping the bar still brings it up to search.
   keyboard: false
-  enter: searching ? (chosen >= 0 ? "▸ " + str.open : "⏎ " + str.ask) : ""
+  enter: searching && iconPicking == "" ? (chosen >= 0 ? "▸ " + str.open : "⏎ " + str.ask) : ""
   // An empty bar's Enter does nothing, as on home.
   onSubmit: {
-    if searching {
+    if searching && iconPicking == "" {
       if chosen >= 0 {
         open(hits[chosen].key)
       } else if !linux {
@@ -162,17 +177,25 @@ panel "app drawer" {
   // the accent, so they show their initials on a badge instead, as an app without an icon does. Add a key to the list
   // to give another app the same treatment.
   let initialsOnly = ["a:com.philips.hearlink2/crc641d37fc9d5495f985.MainActivity"]
-  // An app's icon as the drawer draws it: its own, its silhouette on a badge with monochrome icons, or its initials.
-  component AppIcon(a) {
+  // An app's icon as the drawer draws it: the one it was given, or its own, its silhouette on a badge with monochrome
+  // icons, or its initials.
+  component AppIcon(a, given = null) {
+    let kind = get(given, "kind", "")
+    let value = get(given, "value", "")
+    // Another app's icon is drawn as that app draws it.
+    let who = kind == "app" ? (find(d.apps, x => x.key == value) ?? a) : a
+    let own = (kind == "" || kind == "app") && who.hasIcon && !any(initialsOnly, k => k == who.key)
     Box {
       size: 40
       align: center
       radius: 20 * corners
-      background: a.hasIcon && !d.monochrome && !any(initialsOnly, k => k == a.key) ? transparent : surface
-      if a.hasIcon && !any(initialsOnly, k => k == a.key) {
-        Image { src: a.icon; size: d.monochrome ? 28 : 40; tint: d.monochrome ? accent : null; label: a.label }
+      background: own && !d.monochrome ? transparent : surface
+      if kind == "file" {
+        Image { src: value; size: 28; tint: d.monochrome ? accent : null; label: a.label }
+      } else if own {
+        Image { src: who.icon; size: d.monochrome ? 28 : 40; tint: d.monochrome ? accent : null; label: a.label }
       } else {
-        Text { text: a.initials; fontSize: 15; color: accent }
+        Text { text: kind == "text" ? value : who.initials; fontSize: kind == "text" && len(value) < 2 ? 20 : 15; color: accent; maxLines: 1 }
       }
     }
   }
@@ -197,7 +220,7 @@ panel "app drawer" {
         menu = a.key
         menuShortcuts = shortcuts(a.key)
       }
-      AppIcon { a: a }
+      AppIcon { a: a; given: get(icons, a.key, null) }
       Text { text: a.name; fontSize: 15; maxLines: 1; weight: 1 }
       Popup {
         visible: menu == a.key && menuShortcuts != null
@@ -271,6 +294,8 @@ panel "app drawer" {
           Spacer { height: 1; fill: width; background: border }
           // Rename gives the app a name of its own; a folder moves it into a section up top.
           Text { text: str.rename; fontSize: 15; fill: width; padding: [12, 12]; onTap: renaming = a.key }
+          // Icon picks what the app shows instead of its own: a character, a file, or another app's icon.
+          Text { text: str.icon; fontSize: 15; fill: width; padding: [12, 12]; onTap: { menu = ""; iconPicking = a.key } }
           Text {
             text: folder == "" ? str.addToFolder : str.removeFromFolder
             fontSize: 15
@@ -331,7 +356,7 @@ panel "app drawer" {
       }
     }
     Column {
-      visible: !searching
+      visible: !searching && iconPicking == ""
       lazy: true
       weight: 1
       fill: width
@@ -385,8 +410,81 @@ panel "app drawer" {
         }
       }
     }
+    // Picking an app's icon: its own or its initials, a character or a file, or another app's icon.
     Column {
-      visible: searching
+      visible: iconPicking != ""
+      weight: 1
+      fill: width
+      gap: 0
+      padding: [4, 0]
+      Row {
+        align: center
+        gap: 12
+        padding: [8, 12, 0, 8]
+        Text { text: str.icon + " · " + iconPickingName.name; color: muted; weight: 1; maxLines: 1 }
+        Text { text: str.cancel; color: accent; onTap: iconPicking = "" }
+      }
+      Row {
+        gap: 12
+        padding: [8, 12, 0, 8]
+        Text { text: str.ownIcon; color: accent; onTap: { icons = remove(icons, iconPicking); iconPicking = "" } }
+        Text { text: str.initialsIcon; color: accent; onTap: { icons = set(icons, iconPicking, {kind: "initials", value: ""}); iconPicking = "" } }
+      }
+      // A character or emoji as the icon.
+      Input {
+        placeholder: str.typeIcon
+        fill: width
+        fontSize: 15
+        padding: [12, 12]
+        onSubmit: {
+          if trim(value) != "" {
+            icons = set(icons, iconPicking, {kind: "text", value: trim(value)})
+            iconPicking = ""
+          }
+        }
+      }
+      // An svg or png in this system as the icon.
+      Input {
+        placeholder: str.iconFile
+        fill: width
+        fontSize: 15
+        padding: [12, 12]
+        onSubmit: {
+          if trim(value) != "" {
+            icons = set(icons, iconPicking, {kind: "file", value: trim(value)})
+            iconPicking = ""
+          }
+        }
+      }
+      Text { text: str.borrowIcon; color: muted; padding: [12, 12, 0, 8] }
+      Column {
+        lazy: true
+        weight: 1
+        fill: width
+        gap: 0
+        for row in borrowRows key row.key {
+          Row {
+            fill: width
+            gap: 8
+            padding: [2, 12]
+            for a in row.cells {
+              Box {
+                size: 44
+                radius: 22 * corners
+                align: center
+                onTap: {
+                  icons = set(icons, iconPicking, {kind: "app", value: a.key})
+                  iconPicking = ""
+                }
+                AppIcon { a: a }
+              }
+            }
+          }
+        }
+      }
+    }
+    Column {
+      visible: searching && iconPicking == ""
       lazy: true
       reverse: true
       weight: 1
@@ -403,7 +501,7 @@ panel "app drawer" {
     }
     // The one line above the bar that sends what's typed to the agent; outlined when that's what Enter does.
     Row {
-      visible: searching
+      visible: searching && iconPicking == ""
       fill: width
       gap: 4
       padding: [12, 10]
