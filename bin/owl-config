@@ -7,6 +7,7 @@ restore-tile.owl:
 
     owl-config save [message]      save + upload, keeping the newest 10
     owl-config list                refresh the cached list of backups
+    owl-config contents [latest]   list the files inside one backup, for the tile
     owl-config check [latest]      download and validate one, change nothing
     owl-config restore [latest]    apply one, with a full snapshot first
     owl-config undo                put back what was here before the last restore
@@ -42,6 +43,8 @@ REPO = HOME / "omalauncher-config"
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "owl-config"
 STATUS = CACHE / "status.json"
 BACKUPS = CACHE / "backups.json"
+CONTENTS = CACHE / "contents.json"
+LISTINGS = CACHE / "contents"
 LOCK = CACHE / "lock"
 LOG = CACHE / "log.txt"
 AUTH = HOME / ".pi/agent/skills/google-workspace/scripts/auth.js"
@@ -116,6 +119,54 @@ def list_backups():
     backups = json.loads(output[-1])
     write_json(BACKUPS, backups)
     return backups
+
+
+GROUP_ORDER = (
+    ("widgets", "widgets", "omalauncher/widgets/"),
+    ("style", "style", "omalauncher/style/"),
+    ("home", "home layout", "omalauncher/home/"),
+    ("themes", "themes", "omarchy/themes/"),
+    ("backgrounds", "backgrounds", "omarchy/backgrounds/"),
+    ("fonts", "fonts", ""),
+    ("pi", "pi", "pi/"),
+    ("tools", "tools", "bin/"),
+    ("setup", "setup files", ""),
+)
+GROUP_ROOTS = tuple((root, key) for key, _, root in GROUP_ORDER if root)
+GROUP_ROOT = {key: root for key, _, root in GROUP_ORDER}
+LISTING_VERSION = 3
+
+
+def group_of(path):
+    if path == "fonts.tar.zst":
+        return "fonts"
+    for prefix, key in GROUP_ROOTS:
+        if path.startswith(prefix):
+            return key
+    return "setup"
+
+
+def font_count(archive, folder):
+    """How many font files the fonts bundle holds, or None without one."""
+    try:
+        with tarfile.open(archive, "r:gz") as tar:
+            member = tar.getmember("omalauncher-config/fonts.tar.zst")
+            tar.extract(member, folder, filter="data")
+    except (KeyError, tarfile.TarError):
+        return None
+    bundle = Path(folder) / "omalauncher-config" / "fonts.tar.zst"
+    if not bundle.is_file() or not shutil.which("zstd"):
+        return None
+    try:
+        done = subprocess.run(
+            ["tar", "--use-compress-program=zstd", "-tvf", str(bundle)],
+            capture_output=True, text=True, timeout=120,
+        )
+    except Exception:  # noqa: BLE001 - the count is a nicety, never the point
+        return None
+    if done.returncode != 0:
+        return None
+    return sum(1 for line in (done.stdout or "").splitlines() if line and not line.startswith("d"))
 
 
 def find_backup(backups, wanted):
@@ -360,6 +411,112 @@ def save(message):
     return 0
 
 
+def contents(wanted):
+    """List what one backup holds, for the backup tile's screen.
+
+    Written to CONTENTS.json, which the widget reads: say it is reading at once,
+    then the files, grouped. The listing is cached by Drive id, because a backup
+    never changes; a second look needs no download.
+    """
+    try:
+        backups = list_backups()
+    except Exception as error:  # noqa: BLE001
+        write_json(CONTENTS, {"state": "error", "id": "", "message": str(error)})
+        print(str(error), file=sys.stderr)
+        return 1
+    target = find_backup(backups, wanted)
+    if target is None:
+        message = f"no backup named {wanted}"
+        write_json(CONTENTS, {"state": "error", "id": "", "message": message})
+        print(message, file=sys.stderr)
+        return 1
+
+    seen = LISTINGS / target["id"]
+    if seen.is_file():
+        try:
+            data = json.loads(seen.read_text())
+        except Exception:  # noqa: BLE001 - a broken cache is just a cache miss
+            data = None
+        if data and data.get("v") == LISTING_VERSION:
+            write_json(CONTENTS, data)
+            print(json.dumps(data))
+            return 0
+
+    write_json(
+        CONTENTS,
+        {
+            "state": "reading",
+            "id": target["id"],
+            "name": target["name"],
+            "at": target.get("at"),
+            "link": target.get("link"),
+            "total": 0,
+            "bytes": target.get("size") or 0,
+            "groups": [],
+        },
+    )
+    try:
+        with tempfile.TemporaryDirectory(prefix="owl-config-") as folder:
+            archive = Path(folder) / target["name"]
+            done = run_logged(
+                [NODE, str(REPO / "drive.js"), "download", target["id"], str(archive), account()],
+                timeout=300,
+            )
+            if done.returncode != 0 or not archive.is_file():
+                raise RuntimeError(last_line(done.stderr) or "the download failed")
+            entries = []
+            with tarfile.open(archive, "r:gz") as tar:
+                for member in tar.getmembers():
+                    if not member.isfile():
+                        continue
+                    name = member.name
+                    if name.startswith("omalauncher-config/"):
+                        name = name[len("omalauncher-config/"):]
+                    entries.append((name, member.size))
+            fonts = font_count(archive, folder)
+
+        groups = {}
+        for name, size in sorted(entries):
+            key = group_of(name)
+            root = GROUP_ROOT.get(key, "")
+            group = groups.setdefault(
+                key, {"key": key, "label": key, "root": root, "count": 0, "bytes": 0, "files": []}
+            )
+            note = f"{fonts} font files" if name == "fonts.tar.zst" and fonts else None
+            shown = name[len(root):] if root and name.startswith(root) else name
+            group["files"].append({"path": shown, "size": size, "note": note})
+            group["count"] += 1
+            group["bytes"] += size
+
+        data = {
+            "v": LISTING_VERSION,
+            "state": "ok",
+            "id": target["id"],
+            "name": target["name"],
+            "at": target.get("at"),
+            "link": target.get("link"),
+            "total": len(entries),
+            "bytes": target.get("size") or sum(size for _, size in entries),
+            "groups": [
+                dict(groups[key], label=label, root=root)
+                for key, label, root in GROUP_ORDER
+                if key in groups
+            ],
+        }
+        LISTINGS.mkdir(parents=True, exist_ok=True)
+        write_json(seen, data)
+        write_json(CONTENTS, data)
+        print(json.dumps(data))
+        return 0
+    except Exception as error:  # noqa: BLE001 - the tile shows whatever went wrong
+        write_json(
+            CONTENTS,
+            {"state": "error", "id": target["id"], "name": target["name"], "message": str(error)},
+        )
+        print(str(error), file=sys.stderr)
+        return 1
+
+
 def check(wanted):
     """Download one backup and validate it; nothing live is touched."""
     backups = list_backups()
@@ -526,14 +683,18 @@ def main():
             print(str(error), file=sys.stderr)
             return 1
 
+    if command == "contents":
+        wanted = sys.argv[2] if len(sys.argv) > 2 else "latest"
+        return contents(wanted)
+
     if command == "check":
         wanted = sys.argv[2] if len(sys.argv) > 2 else "latest"
         return check(wanted)
 
     if command not in ("save", "restore", "undo"):
         print(
-            "usage: owl-config save [message] | list | check [latest|id|name] | "
-            "restore <latest|id|name> [--dry-run] | undo | status",
+            "usage: owl-config save [message] | list | contents [latest|id|name] | "
+            "check [latest|id|name] | restore <latest|id|name> [--dry-run] | undo | status",
             file=sys.stderr,
         )
         return 2

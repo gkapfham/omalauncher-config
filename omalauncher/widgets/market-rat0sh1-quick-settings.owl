@@ -1,9 +1,8 @@
 widget "quick settings" {
-  // Quick settings in Omarchy's style: Wi-Fi, mobile data, flashlight, media, Do Not Disturb and btop in one row
+  // Quick settings in Omarchy's style: Wi-Fi, mobile data, media, flashlight, Do Not Disturb and Bluetooth in one row
   // on square tiles, set in JetBrains Mono. Wi-Fi, data and Do Not Disturb come from Android itself, so no adb.
 
-  meta { owl: 13; description: "Compact Omarchy-style quick settings in one row: Wi-Fi, mobile data, flashlight, media, Do Not Disturb and btop. Reads the phone's radios directly, no adb"; version: "2.0"; license: "MIT"; category: "system" }
-  requires { pacman: ["btop"] }
+  meta { owl: 13; description: "Compact Omarchy-style quick settings in one row: Wi-Fi, mobile data, media, flashlight, Do Not Disturb and Bluetooth. Reads the phone's radios directly, no adb"; version: "2.1"; license: "MIT"; category: "system" }
 
   size: 8x2
   minSize: 6x2
@@ -22,6 +21,8 @@ widget "quick settings" {
   let dim = mix(muted, foreground, 0.45)
   // The carrier's first word keeps the data tile's note short enough to fit.
   let dataNote = !sim.data ? "off" : lower(words(sim.carrier ?? "on")[0])
+  // Where the sound goes, when it's headphones, keeps the Bluetooth tile's note short too.
+  let btNote = !m.bluetooth ? "off" : (v.output != null && v.output.type == "bluetooth" ? lower(words(v.output.name ?? "on")[0]) : "on")
 
   component Ic(g, sz = 22, tint = foreground) {
     Text { text: g; font: nf; fontSize: sz; color: tint; maxLines: 1; align: center }
@@ -38,7 +39,7 @@ widget "quick settings" {
       background: on ? primary : containerHigh
       border: 1
       borderColor: on ? primary : outline
-      radius: 0
+      radius: 6 * corners
       animate background: tween(200ms, "ease")
       Ic { g: g; sz: 18; tint: on ? onPrimary : foreground }
       Text { text: label; font: jb; fontSize: 10; fontWeight: 600; color: on ? onPrimary : foreground; maxLines: 1; align: center }
@@ -55,12 +56,13 @@ widget "quick settings" {
       // Android lets a launcher read the radios but not switch them, so a tap opens Android's own panel.
       Box { weight: 1; fill: height; onTap: { haptic(); settings("wifi") }; Tile { g: m.wifi ? "󰖩" : "󰖪"; label: "wi-fi"; note: m.wifi ? "on" : "off"; on: m.wifi ?? false } }
       Box { weight: 1; fill: height; onTap: { haptic(); settings("data") }; Tile { g: sim.data ? "󰒢" : "󰞃"; label: "data"; note: dataNote; on: sim.data ?? false } }
+      Box { weight: 1; fill: height; onTap: volume("toggle"); Tile { g: v.muted ? "󰖁" : "󰕾"; label: "media"; note: v.muted ? "muted" : "${v.level}%"; on: !v.muted } }
+      // Like the radios above, Android shows Bluetooth's state but won't switch it here.
+      Box { weight: 1; fill: height; onTap: { haptic(); settings("bluetooth") }; Tile { g: m.bluetooth ? "󰂯" : "󰂲"; label: "bt"; note: btNote; on: m.bluetooth ?? false } }
       if m.torch != null {
         Box { weight: 1; fill: height; onTap: { haptic(); torch("toggle") }; Tile { g: m.torch ? "󰉄" : "󰉅"; label: "torch"; note: m.torch ? "on" : "off"; on: m.torch } }
       }
-      Box { weight: 1; fill: height; onTap: volume("toggle"); Tile { g: v.muted ? "󰖁" : "󰕾"; label: "media"; note: v.muted ? "muted" : "${v.level}%"; on: !v.muted } }
       Box { weight: 1; fill: height; onTap: { haptic(); dnd("toggle") }; Tile { g: m.dnd ? "󰍶" : "󰍷"; label: "dnd"; note: m.dnd ? (m.dndAllows ?? "on") : (m.ringer ?? "off"); on: m.dnd } }
-      Box { weight: 1; fill: height; onTap: terminal("btop"); Tile { g: "󰐰"; label: "btop"; note: "monitor" } }
     }
   }
 }

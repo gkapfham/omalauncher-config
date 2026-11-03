@@ -1,5 +1,6 @@
 widget "backup" {
-  // A home tile for backups: tap back up to save and upload, tap the tile for the saved setups.
+  // A home tile for backups: tap back up to save and upload, tap the tile for the saved setups
+  // and, for any of them, exactly which files it holds.
   page: 4
   order: 1
   size: 3x3
@@ -17,13 +18,18 @@ widget "backup" {
 
   source st = file("~/.cache/owl-config/status.json") json
   source bl = file("~/.cache/owl-config/backups.json") json
+  // owl-config contents writes this: the files inside the backup being looked at.
+  source cs = file("~/.cache/owl-config/contents.json") json
   source now = clock every 1m
 
   state confirm = ""
+  // The id of the backup whose files the screen is showing; "" is the list.
+  state viewing = ""
 
   let busy = st != null && (st.state == "saving" || st.state == "restoring")
   let stateColor = st == null ? muted : st.state == "error" ? red : st.state == "ok" ? green : yellow
   let last = len(bl ?? []) > 0 ? bl[0] : null
+  let inside = cs != null && cs.id == viewing ? cs : null
 
   // First open with no cached list (a new install): fetch it once.
   on bl first {
@@ -32,7 +38,10 @@ widget "backup" {
     }
   }
 
-  onTap: screen()
+  onTap: {
+    viewing = ""
+    screen()
+  }
 
   Column {
     fill: true
@@ -60,77 +69,175 @@ widget "backup" {
   }
 
   screen {
-    title: "backup"
+    title: viewing == "" ? "backup" : "what's inside"
     Column {
       fill: true
       gap: 10
       padding: [12, 0, 12, 12]
 
-      Row {
-        gap: 8
-        Button {
-          text: busy ? (st.state == "saving" ? "backing up…" : "restoring…") : "back up now"
-          color: busy ? muted : accent
+      if viewing == "" {
+        Row {
+          gap: 8
+          Button {
+            text: busy ? (st.state == "saving" ? "backing up…" : "restoring…") : "back up now"
+            color: busy ? muted : accent
+            weight: 1
+            onTap: {
+              if !busy {
+                run("setsid -f $HOME/.local/bin/owl-config save >/dev/null 2>&1 </dev/null")
+              }
+            }
+          }
+          Button {
+            text: "refresh list"
+            weight: 1
+            onTap: run("setsid -f $HOME/.local/bin/owl-config list >/dev/null 2>&1 </dev/null")
+          }
+        }
+
+        Column {
+          fill: width
+          gap: 6
+          padding: [12, 10]
+          background: surface
+          radius: 8 * corners
+          Row {
+            align: center
+            gap: 8
+            Text { text: st == null ? "ready" : st.state; color: stateColor; weight: 1 }
+            if st != null {
+              Text { text: fmtAgo(st.at, now); style: small; color: muted }
+            }
+          }
+          Text { text: st == null ? "no backup has run from here yet" : st.message; style: small; color: muted; maxLines: 3 }
+          if st != null && st.link != null {
+            Text { text: "open in Drive"; color: accent; style: small; onTap: url(st.link) }
+          }
+        }
+
+        Text { text: "saved setups"; style: label }
+        Text {
+          text: "tap one to see its files"
+          style: small
+          color: muted
+          padding: [0, 4]
+        }
+
+        Column {
+          scroll: true
           weight: 1
-          onTap: {
-            if !busy {
-              run("setsid -f $HOME/.local/bin/owl-config save >/dev/null 2>&1 </dev/null")
+          gap: 2
+          if len(bl ?? []) == 0 {
+            Text { text: "nothing in Drive yet — tap back up now"; style: small; color: muted; padding: [0, 4] }
+          }
+          for b in bl ?? [] key b.id {
+            Row {
+              fill: width
+              gap: 10
+              align: center
+              padding: [8, 4]
+              onTap: {
+                viewing = b.id
+                run("setsid -f $HOME/.local/bin/owl-config contents ${sh(b.id)} >/dev/null 2>&1 </dev/null")
+              }
+              Text { text: fmtTime(b.at, "EEE d MMM  HH:mm"); weight: 1; maxLines: 1 }
+              Text { text: fmtBytes(b.size); style: small; color: muted }
+              Button { text: "restore"; color: red; onTap: confirm = b.id }
             }
           }
         }
-        Button {
-          text: "refresh list"
-          weight: 1
-          onTap: run("setsid -f $HOME/.local/bin/owl-config list >/dev/null 2>&1 </dev/null")
-        }
-      }
 
-      Column {
-        fill: width
-        gap: 6
-        padding: [12, 10]
-        background: surface
-        radius: 8 * corners
+        Text {
+          text: "restoring sets the current setup aside first, under ~/.local/share/omalauncher-restored."
+          style: small
+          color: muted
+        }
+      } else {
         Row {
-          align: center
           gap: 8
-          Text { text: st == null ? "ready" : st.state; color: stateColor; weight: 1 }
-          if st != null {
-            Text { text: fmtAgo(st.at, now); style: small; color: muted }
+          Button {
+            text: "‹ saved setups"
+            weight: 1
+            onTap: viewing = ""
+          }
+          if inside != null && inside.link != null {
+            Button {
+              text: "open in Drive"
+              weight: 1
+              onTap: url(inside.link)
+            }
           }
         }
-        Text { text: st == null ? "no backup has run from here yet" : st.message; style: small; color: muted; maxLines: 3 }
-        if st != null && st.link != null {
-          Text { text: "open in Drive"; color: accent; style: small; onTap: url(st.link) }
-        }
-      }
 
-      Text { text: "saved setups"; style: label }
+        Column {
+          scroll: true
+          weight: 1
+          gap: 8
 
-      Column {
-        scroll: true
-        weight: 1
-        gap: 2
-        if len(bl ?? []) == 0 {
-          Text { text: "nothing in Drive yet — tap back up now"; style: small; color: muted; padding: [0, 4] }
-        }
-        for b in bl ?? [] key b.id {
-          Row {
+          // What this backup is and how much it holds.
+          Column {
             fill: width
-            gap: 10
-            align: center
-            padding: [8, 4]
-            Text { text: fmtTime(b.at, "EEE d MMM  HH:mm"); weight: 1; maxLines: 1 }
-            Text { text: fmtBytes(b.size); style: small; color: muted }
-            Button { text: "restore"; color: red; onTap: confirm = b.id }
+            gap: 4
+            padding: [12, 10]
+            background: surface
+            radius: 8 * corners
+            Row {
+              align: center
+              gap: 8
+              Text {
+                text: inside == null ? "reading the backup…" : inside.state == "error" ? "couldn't read it" : "${inside.total} files"
+                weight: 1
+                color: inside != null && inside.state == "error" ? red : foreground
+              }
+              if inside != null && inside.bytes != null {
+                Text { text: fmtBytes(inside.bytes); style: small; color: muted }
+              }
+            }
+            if inside != null && inside.at != null {
+              Text { text: fmtTime(inside.at, "EEE d MMM  HH:mm"); style: small; color: muted }
+            }
+            if inside != null && inside.name != null {
+              Text { text: inside.name; style: small; color: muted; maxLines: 2 }
+            }
+            if inside != null && inside.state == "error" {
+              Text { text: inside.message; style: small; color: red; maxLines: 4 }
+              Button {
+                text: "try again"
+                onTap: run("setsid -f $HOME/.local/bin/owl-config contents ${sh(viewing)} >/dev/null 2>&1 </dev/null")
+              }
+            }
+            if inside == null || inside.state == "reading" {
+              Text { text: "downloading the backup to list what's in it…"; style: small; color: muted }
+            }
+          }
+
+          // Every file in the archive, under the part of the setup it belongs to.
+          for g in inside.groups ?? [] key g.key {
+            Column {
+              fill: width
+              gap: 2
+              Row {
+                fill: width
+                gap: 8
+                align: center
+                Text { text: g.label; style: label; weight: 1 }
+                Text { text: "${g.count} · " + fmtBytes(g.bytes); style: small; color: muted }
+              }
+              if g.root != "" {
+                Text { text: g.root; style: small; color: muted }
+              }
+              for f in g.files key f.path {
+                Row {
+                  fill: width
+                  gap: 8
+                  padding: [2, 4]
+                  Text { text: f.path; fontSize: 11; weight: 1; maxLines: 2 }
+                  Text { text: f.note ?? fmtBytes(f.size); style: small; color: muted }
+                }
+              }
+            }
           }
         }
-      }
-
-      Text {
-        text: "restoring sets the current setup aside first, under ~/.local/share/omalauncher-restored."
-        style: small
-        color: muted
       }
 
       Popup {

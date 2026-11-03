@@ -109,8 +109,10 @@ panel "app drawer" {
   let iconPickingName = find(d.apps, x => x.key == iconPicking) ?? {name: ""}
   let borrowApps = (searching ? rank(d.apps, typed) : d.apps).filter(a => a.key != iconPicking)
   let borrowRows = chunk(borrowApps, 5).map((cells, r) => {key: "i:" + r, cells: cells})
-  // A renamed app shows its given name and searches by it, its own name kept as an alias.
-  let renamedAll = d.apps.map(a => merge(a, {name: get(names, a.key, a.name), alias: get(names, a.key, a.name) == a.name ? a.alias : a.name}))
+  // A renamed app shows its given name and searches by it, its own name kept as an alias. The launcher hands the apps
+  // over already in alphabetical order, by the name each came with; a given name needs them sorted again, in its place,
+  // the way the launcher sorts (lowercase, so case doesn't come first).
+  let renamedAll = d.apps.map(a => merge(a, {name: get(names, a.key, a.name), alias: get(names, a.key, a.name) == a.name ? a.alias : a.name})).sortBy(a => lower(a.name))
   // Hidden apps leave the list (and search) until they're unhidden from the section at its end;
   // an app in a folder leaves the list for its folder's section.
   let mineAll = renamedAll.filter(a => (tab == "work") == (a.profile == "work"))

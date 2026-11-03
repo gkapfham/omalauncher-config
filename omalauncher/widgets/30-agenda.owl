@@ -14,14 +14,28 @@ widget "agenda" {
 
   // owl-agenda (in ~/.local/bin) asks Google with the token the pi google-workspace skill keeps, and prints the
   // events as JSON. No account yet: it prints `error`, which the tile shows with a tap that signs one in.
-  source ev = cmd("owl-agenda json") every 10m json timeout 60s
+  // One retry after a pause, because a token refresh or the network can fail once and then work again.
+  source ev = cmd("owl-agenda json || { sleep 5; owl-agenda json; }") every 10m json timeout 90s status
   source now = clock every 1m
+
+  // The last good answer, kept so that a fetch that fails leaves the schedule where it is instead of emptying
+  // the tile; `offline` then says how old what's shown is.
+  state last = null persist
+  on ev first { if ev.ok { last = ev.out } }
+  on ev { if ev.ok { last = ev.out } }
 
   let today = fmtTime(now, "yyyy-MM-dd")
   let tomorrow = fmtTime(now + 86400, "yyyy-MM-dd")
-  let events = ev.events ?? []
-  let cals = ev.cals ?? []
-  let failed = ev.error
+  // `raw` is what to draw: this fetch's answer, or the last one that worked. `problem` is why the last fetch
+  // failed, `stale` that we're showing older data because of it, and `failed` that there's nothing to show.
+  let raw = ev != null && ev.ok ? ev.out : last
+  let problem = ev == null || ev.ok ? null : (ev.out.error ?? ev.err ?? "offline")
+  let stale = problem != null && last != null
+  let failed = problem != null && last == null ? problem : null
+  let since = raw != null && raw.at != null ? fmtTime(raw.at, "HH:mm") : null
+  let staleNote = since == null ? "can't reach Google — showing what I last had" : "can't reach Google — showing the last update, ${since}"
+  let events = raw.events ?? []
+  let cals = raw.cals ?? []
   // What fits: 12 of padding top and bottom, the heading row 18, a day heading 22, an event row 23, and
   // 16 for the "+N more" line when there are more events than fit. The tile can be any size.
   let inner = (tileHeight ?? 460) - 24 - 18
@@ -62,9 +76,15 @@ widget "agenda" {
       gap: 6
       align: center
       Text { text: "agenda"; font: mono; fontSize: 11; color: muted; weight: 1; maxLines: 1; letterSpacing: 1 }
-      if failed != null {
-        Text { text: "offline"; font: mono; fontSize: 10; color: orange; maxLines: 1 }
-      } else if ev == null {
+      if stale {
+        Text {
+          text: since != null ? "offline ${since}" : "offline"
+          font: mono
+          fontSize: 10
+          color: orange
+          maxLines: 1
+        }
+      } else if raw == null {
         Text { text: "…"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
       }
     }
@@ -76,7 +96,7 @@ widget "agenda" {
         maxLines: 3
         onTap: terminal("owl-agenda login")
       }
-    } else if ev == null {
+    } else if raw == null {
       Text { text: "loading…"; style: small; color: muted }
     } else if len(events) == 0 {
       Text { text: "nothing in the calendar"; style: small; color: muted }
@@ -106,6 +126,14 @@ widget "agenda" {
         scroll: true
         gap: 2
         onPull: refresh()
+        if stale {
+          Text {
+            text: staleNote
+            style: small
+            color: orange
+            padding: [0, 6, 0, 12]
+          }
+        }
         for e, i in events key e.s + e.t {
           if i == 0 || events[i - 1].day != e.day {
             Box {

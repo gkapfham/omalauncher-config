@@ -4,11 +4,10 @@
 
 version = 1
 theme = "vitamin"
-background = "image-1793586720734.png"
 font = "Maple Mono NF"
 
 [home]
-columns = 9
+columns = 8
 single-page = true
 
 [widgets]
@@ -28,5 +27,4 @@ shown = false
 font = "Maple Mono NF:style=SemiBold"
 
 [gestures]
-swipe-up = "drawer.owl"
 swipe-down = "controls.owl"

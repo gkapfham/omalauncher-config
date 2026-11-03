@@ -7,26 +7,31 @@
 # profile's), "linux:<desktop id>" or "owl:<file>".
 # What couldn't be read is in errors.txt next to this file.
 version = 1
-columns = 9
+columns = 8
 
 [[page]]
 face = "market-face-simonschubert-omarchy.owl"
 
 [[page]]
 tiles = [
-  { widget = "market-rat0sh1-quick-settings.owl", x = 0, y = 0, w = 9, h = 2 },
-  { widget = "30-agenda.owl", x = 0, y = 2, w = 9, h = 13 },
+  { widget = "market-rat0sh1-quick-settings.owl", x = 0, y = 0, w = 8, h = 2 },
+  { widget = "30-agenda.owl", x = 0, y = 2, w = 8, h = 13 },
 ]
 
 [[page]]
 tiles = [
-  { widget = "10-today.owl", x = 0, y = 0, w = 9, h = 5 },
-  { widget = "market-rcrohmana-storage.owl", x = 0, y = 5, w = 9, h = 7 },
-  { widget = "market-reymarch995-now-playing.owl", x = 0, y = 12, w = 9, h = 3 },
+  { widget = "10-today.owl", x = 0, y = 0, w = 8, h = 6 },
+  { widget = "market-simonschubert-now-playing.owl", x = 0, y = 6, w = 8, h = 4 },
 ]
 
 [[page]]
 tiles = [
-  { widget = "backup-tile.owl", x = 0, y = 0, w = 5, h = 3 },
-  { widget = "restore-tile.owl", x = 0, y = 3, w = 5, h = 3 },
+  { widget = "market-rcrohmana-storage.owl", x = 0, y = 0, w = 8, h = 7 },
+  { widget = "backup-tile.owl", x = 0, y = 7, w = 4, h = 3 },
+  { widget = "restore-tile.owl", x = 4, y = 7, w = 4, h = 3 },
+]
+
+[[page]]
+tiles = [
+  { widget = "market-nicomaure-speedtest.owl", x = 0, y = 0, w = 8, h = 10 },
 ]
