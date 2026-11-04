@@ -25,6 +25,15 @@ widget "today" {
       wind: dir => "wind ${lower(dir)}"
       uvLevel: uv => uv >= 8 ? "very high" : uv >= 6 ? "high" : uv >= 3 ? "moderate" : "low"
       phase: (phase, lit) => "${lower(phase)} · ${lit}% lit"
+      dew: "dew point"; gust: "gusts"; clouds: "clouds"; lowCloud: "low"; midCloud: "mid"; highCloud: "high"; dewShort: "dew"
+      windWord: "wind"; surface: "surface"; uvMax: "uv max"; clearSky: "clear sky"; max: "max"
+      daylight: "daylight"; sunshine: "sunshine"; air: "air quality"; pollen: "pollen"; airShort: "air"
+      grass: "grass"; birch: "birch"; ragweed: "ragweed"; olive: "olive"; mugwort: "mugwort"; alder: "alder"
+      solar: "solar"; evap: "evaporation"; freeze: "freezing"; unstable: "instability"; bulb: "wet bulb"
+      snow: "snow"; total: "total"; next2h: "next 2 hours"; nextFull: "next full"; nextNew: "next new"; more: "more numbers"
+      rainNow: "rain now"; rainIn: m => "rain in ${m} min"; rainStops: m => "rain stops in ${m} min"; dryNext: h => "dry for ${h} h"
+      pollenLevel: v => v >= 200 ? "very high" : v >= 50 ? "high" : v >= 10 ? "moderate" : "low"
+      aqiLevel: a => a <= 50 ? "good" : a <= 100 ? "moderate" : a <= 150 ? "unhealthy for some" : a <= 200 ? "unhealthy" : a <= 300 ? "very unhealthy" : "hazardous"
     }
     id {
       title: "cuaca"; loading: "cuaca…"; offline: "cuaca offline"; city: "kota · kosong = otomatis"
@@ -47,6 +56,15 @@ widget "today" {
         "W": "barat", "WNW": "barat", "NW": "barat laut", "NNW": "utara"
       }, dir, lower(dir))
       uvLevel: uv => uv >= 8 ? "sangat tinggi" : uv >= 6 ? "tinggi" : uv >= 3 ? "sedang" : "rendah"
+      dew: "titik embun"; gust: "hembusan"; clouds: "awan"; lowCloud: "bawah"; midCloud: "tengah"; highCloud: "atas"; dewShort: "embun"
+      windWord: "angin"; surface: "permukaan"; uvMax: "uv maks"; clearSky: "langit cerah"; max: "maks"
+      daylight: "siang"; sunshine: "sinar matahari"; air: "kualitas udara"; pollen: "serbuk sari"; airShort: "udara"
+      grass: "rumput"; birch: "birch"; ragweed: "ragweed"; olive: "zaitun"; mugwort: "mugwort"; alder: "alder"
+      solar: "surya"; evap: "penguapan"; freeze: "beku"; unstable: "ketidakstabilan"; bulb: "bola basah"
+      snow: "salju"; total: "total"; next2h: "2 jam ke depan"; nextFull: "purnama berikutnya"; nextNew: "bulan baru berikutnya"; more: "angka lain"
+      rainNow: "hujan sekarang"; rainIn: m => "hujan ${m} menit lagi"; rainStops: m => "hujan berhenti ${m} menit lagi"; dryNext: h => "kering ${h} jam"
+      pollenLevel: v => v >= 200 ? "sangat tinggi" : v >= 50 ? "tinggi" : v >= 10 ? "sedang" : "rendah"
+      aqiLevel: a => a <= 50 ? "baik" : a <= 100 ? "sedang" : a <= 150 ? "tidak sehat bagi sebagian" : a <= 200 ? "tidak sehat" : a <= 300 ? "sangat tidak sehat" : "berbahaya"
       phase: (phase, lit) => get({
         "New Moon": "bulan baru", "Waxing Crescent": "sabit awal", "First Quarter": "kuartir pertama",
         "Waxing Gibbous": "cembung awal", "Full Moon": "purnama", "Waning Gibbous": "cembung akhir",
@@ -79,6 +97,15 @@ widget "today" {
         "Waxing Gibbous": "gibosa creciente", "Full Moon": "luna llena", "Waning Gibbous": "gibosa menguante",
         "Last Quarter": "cuarto menguante", "Waning Crescent": "menguante"
       }, phase, lower(phase)) + " · ${lit}% iluminada"
+      dew: "punto de rocío"; gust: "rachas"; clouds: "nubes"; lowCloud: "bajas"; midCloud: "medias"; highCloud: "altas"; dewShort: "rocío"
+      windWord: "viento"; surface: "superficie"; uvMax: "uv máx"; clearSky: "cielo despejado"; max: "máx"
+      daylight: "luz de día"; sunshine: "sol"; air: "calidad del aire"; pollen: "polen"; airShort: "aire"
+      grass: "hierba"; birch: "abedul"; ragweed: "ambrosía"; olive: "olivo"; mugwort: "artemisa"; alder: "aliso"
+      solar: "solar"; evap: "evaporación"; freeze: "congelación"; unstable: "inestabilidad"; bulb: "bulbo húmedo"
+      snow: "nieve"; total: "total"; next2h: "próximas 2 horas"; nextFull: "próxima llena"; nextNew: "próxima nueva"; more: "más datos"
+      rainNow: "llueve ahora"; rainIn: m => "lluvia en ${m} min"; rainStops: m => "la lluvia para en ${m} min"; dryNext: h => "seco ${h} h"
+      pollenLevel: v => v >= 200 ? "muy alto" : v >= 50 ? "alto" : v >= 10 ? "moderado" : "bajo"
+      aqiLevel: a => a <= 50 ? "buena" : a <= 100 ? "moderada" : a <= 150 ? "mala para algunos" : a <= 200 ? "mala" : a <= 300 ? "muy mala" : "peligrosa"
     }
     pt {
       title: "clima"; loading: "clima…"; offline: "clima offline"; city: "cidade · vazio = auto"
@@ -106,6 +133,15 @@ widget "today" {
         "Waxing Gibbous": "crescente gibosa", "Full Moon": "lua cheia", "Waning Gibbous": "minguante gibosa",
         "Last Quarter": "quarto minguante", "Waning Crescent": "minguante"
       }, phase, lower(phase)) + " · ${lit}% iluminada"
+      dew: "ponto de orvalho"; gust: "rajadas"; clouds: "nuvens"; lowCloud: "baixas"; midCloud: "médias"; highCloud: "altas"; dewShort: "orvalho"
+      windWord: "vento"; surface: "superfície"; uvMax: "uv máx"; clearSky: "céu limpo"; max: "máx"
+      daylight: "luz do dia"; sunshine: "sol"; air: "qualidade do ar"; pollen: "pólen"; airShort: "ar"
+      grass: "gramíneas"; birch: "bétula"; ragweed: "ambrosia"; olive: "oliveira"; mugwort: "artemísia"; alder: "amieiro"
+      solar: "solar"; evap: "evaporação"; freeze: "congelamento"; unstable: "instabilidade"; bulb: "bulbo úmido"
+      snow: "neve"; total: "total"; next2h: "próximas 2 horas"; nextFull: "próxima cheia"; nextNew: "próxima nova"; more: "mais dados"
+      rainNow: "chovendo agora"; rainIn: m => "chuva em ${m} min"; rainStops: m => "a chuva para em ${m} min"; dryNext: h => "seco ${h} h"
+      pollenLevel: v => v >= 200 ? "muito alto" : v >= 50 ? "alto" : v >= 10 ? "moderado" : "baixo"
+      aqiLevel: a => a <= 50 ? "boa" : a <= 100 ? "moderada" : a <= 150 ? "ruim para alguns" : a <= 200 ? "ruim" : a <= 300 ? "muito ruim" : "perigosa"
     }
     de {
       title: "wetter"; loading: "wetter…"; offline: "wetter offline"; city: "stadt · leer = auto"
@@ -128,6 +164,15 @@ widget "today" {
         "W": "westwind", "WNW": "westwind", "NW": "nordwestwind", "NNW": "nordwind"
       }, dir, "wind ${lower(dir)}")
       uvLevel: uv => uv >= 8 ? "sehr hoch" : uv >= 6 ? "hoch" : uv >= 3 ? "mäßig" : "niedrig"
+      dew: "taupunkt"; gust: "böen"; clouds: "wolken"; lowCloud: "tief"; midCloud: "mittel"; highCloud: "hoch"; dewShort: "tau"
+      windWord: "wind"; surface: "boden"; uvMax: "uv max"; clearSky: "klarer himmel"; max: "max"
+      daylight: "tageslicht"; sunshine: "sonnenschein"; air: "luftqualität"; pollen: "pollen"; airShort: "luft"
+      grass: "gräser"; birch: "birke"; ragweed: "ambrosia"; olive: "olive"; mugwort: "beifuß"; alder: "erle"
+      solar: "solar"; evap: "verdunstung"; freeze: "frost"; unstable: "labilität"; bulb: "kühlgrenze"
+      snow: "schnee"; total: "gesamt"; next2h: "nächste 2 stunden"; nextFull: "nächster vollmond"; nextNew: "nächster neumond"; more: "mehr werte"
+      rainNow: "regen jetzt"; rainIn: m => "regen in ${m} min"; rainStops: m => "regen endet in ${m} min"; dryNext: h => "trocken ${h} h"
+      pollenLevel: v => v >= 200 ? "sehr hoch" : v >= 50 ? "hoch" : v >= 10 ? "mäßig" : "niedrig"
+      aqiLevel: a => a <= 50 ? "gut" : a <= 100 ? "mäßig" : a <= 150 ? "ungesund für empfindliche" : a <= 200 ? "ungesund" : a <= 300 ? "sehr ungesund" : "gefährlich"
       phase: (phase, lit) => get({
         "New Moon": "neumond", "Waxing Crescent": "zunehmende sichel", "First Quarter": "erstes viertel",
         "Waxing Gibbous": "zunehmender mond", "Full Moon": "vollmond", "Waning Gibbous": "abnehmender mond",
@@ -155,6 +200,15 @@ widget "today" {
         "W": "西风", "WNW": "西风", "NW": "西北风", "NNW": "北风"
       }, dir, "风向 ${dir}")
       uvLevel: uv => uv >= 8 ? "很强" : uv >= 6 ? "强" : uv >= 3 ? "中等" : "弱"
+      dew: "露点"; gust: "阵风"; clouds: "云量"; lowCloud: "低云"; midCloud: "中云"; highCloud: "高云"; dewShort: "露点"
+      windWord: "风"; surface: "地面"; uvMax: "紫外线峰值"; clearSky: "晴天值"; max: "最高"
+      daylight: "白昼"; sunshine: "日照"; air: "空气质量"; pollen: "花粉"; airShort: "空气"
+      grass: "禾草"; birch: "桦树"; ragweed: "豚草"; olive: "橄榄"; mugwort: "艾蒿"; alder: "桤木"
+      solar: "太阳辐射"; evap: "蒸发"; freeze: "冻结"; unstable: "不稳定能量"; bulb: "湿球"
+      snow: "积雪"; total: "合计"; next2h: "未来 2 小时"; nextFull: "下次满月"; nextNew: "下次新月"; more: "更多数据"
+      rainNow: "正在下雨"; rainIn: m => "${m} 分钟后下雨"; rainStops: m => "${m} 分钟后雨停"; dryNext: h => "${h} 小时无雨"
+      pollenLevel: v => v >= 200 ? "很高" : v >= 50 ? "高" : v >= 10 ? "中" : "低"
+      aqiLevel: a => a <= 50 ? "优" : a <= 100 ? "良" : a <= 150 ? "敏感人群不健康" : a <= 200 ? "不健康" : a <= 300 ? "很不健康" : "危险"
       phase: (phase, lit) => get({
         "New Moon": "新月", "Waxing Crescent": "蛾眉月", "First Quarter": "上弦月",
         "Waxing Gibbous": "盈凸月", "Full Moon": "满月", "Waning Gibbous": "亏凸月",
@@ -189,7 +243,9 @@ widget "today" {
   let imperial = unitChoice == "F" ? true : unitChoice == "C" ? false : autoImperial
   let unit = imperial ? "F" : "C"
   // One request, in the unit asked for, so the field names stay the same when °C/°F is tapped.
-  source wx = http(lat == null || lon == null ? null : "https://api.open-meteo.com/v1/forecast?latitude=${fixed(lat, 4)}&longitude=${fixed(lon, 4)}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,precipitation_probability,weather_code,is_day,uv_index,visibility&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum&timezone=auto&forecast_days=4&temperature_unit=${enc(imperial ? "fahrenheit" : "celsius")}&wind_speed_unit=${enc(imperial ? "mph" : "kmh")}&precipitation_unit=${enc(imperial ? "inch" : "mm")}") every 30m timeout 10s json status
+  source wx = http(lat == null || lon == null ? null : "https://api.open-meteo.com/v1/forecast?latitude=${fixed(lat, 4)}&longitude=${fixed(lon, 4)}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,dew_point_2m,visibility&hourly=temperature_2m,precipitation_probability,weather_code,is_day,uv_index,visibility,dew_point_2m,apparent_temperature,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_gusts_10m,cape,freezing_level_height,sunshine_duration,shortwave_radiation,wet_bulb_temperature_2m,vapour_pressure_deficit,snow_depth,rain,snowfall&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,daylight_duration,sunshine_duration,uv_index_max,uv_index_clear_sky_max,precipitation_probability_max,precipitation_sum,precipitation_hours,snowfall_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,shortwave_radiation_sum,et0_fao_evapotranspiration&minutely_15=precipitation,rain,snowfall,weather_code&forecast_minutely_15=16&timezone=auto&forecast_days=4&temperature_unit=${enc(imperial ? "fahrenheit" : "celsius")}&wind_speed_unit=${enc(imperial ? "mph" : "kmh")}&precipitation_unit=${enc(imperial ? "inch" : "mm")}") every 30m timeout 10s json status
+  // Air quality and pollen are a second service, at the same coordinates.
+  source air = http(lat == null || lon == null ? null : "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${fixed(lat, 4)}&longitude=${fixed(lon, 4)}&current=european_aqi,us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,dust,grass_pollen,birch_pollen,ragweed_pollen,olive_pollen,mugwort_pollen,alder_pollen&timezone=auto") every 1h timeout 10s json status
   let cur = wx == null || !wx.ok ? null : wx.out.current
   let daily = wx == null || !wx.ok ? null : wx.out.daily
   let hourly = wx == null || !wx.ok ? null : wx.out.hourly
@@ -211,7 +267,10 @@ widget "today" {
     t: num(hourly.temperature_2m[hi + i * 3]),
     rain: num(hourly.precipitation_probability[hi + i * 3]),
     code: hourly.weather_code[hi + i * 3],
-    night: num(hourly.is_day[hi + i * 3]) == 0
+    night: num(hourly.is_day[hi + i * 3]) == 0,
+    cloud: num(hourly.cloud_cover[hi + i * 3], 0),
+    wind: num(hourly.wind_speed_10m[hi + i * 3], 0),
+    gust: num(hourly.wind_gusts_10m[hi + i * 3], 0)
   })
   // The three days' range, so their bars share one scale.
   let lowest = daily == null ? 0 : min(take(daily.temperature_2m_min, 3))
@@ -250,6 +309,58 @@ widget "today" {
   let moonAge = ((now - 947182440) % 2551442.976) / 2551442.976
   let moonLit = round((1 - cos(2 * 3.141592653589793 * moonAge)) / 2 * 100)
   let moonPhase = moonAge < 0.0625 || moonAge >= 0.9375 ? "New Moon" : moonAge < 0.1875 ? "Waxing Crescent" : moonAge < 0.3125 ? "First Quarter" : moonAge < 0.4375 ? "Waxing Gibbous" : moonAge < 0.5625 ? "Full Moon" : moonAge < 0.6875 ? "Waning Gibbous" : moonAge < 0.8125 ? "Last Quarter" : "Waning Crescent"
+  // The next full and new moon, from the same cycle: the days until the age reaches a half and a whole.
+  let nextFull = fmtTime(now + max((0.5 - moonAge) % 1, 0.03) * 29.530588 * 86400, "d MMM")
+  let nextNew = fmtTime(now + max((1 - moonAge) % 1, 0.03) * 29.530588 * 86400, "d MMM")
+  // The next two hours in quarter-hours, from the nowcast: when rain starts or stops, and how much is coming.
+  let mins = wx == null || !wx.ok ? null : wx.out.minutely_15
+  let mp = mins == null ? [] : mins.precipitation.map(v => num(v, 0))
+  let wetAt = len(mp) == 0 ? null : find(range(len(mp)), i => mp[i] > 0)
+  let raining = len(mp) > 0 && mp[0] > 0
+  let dryAt = raining ? find(range(len(mp)), i => mp[i] == 0) : null
+  let rainAhead = sum(mp)
+  let nowcast = len(mp) == 0 ? null : raining ? (dryAt == null ? str.rainNow : str.rainStops(dryAt * 15)) : wetAt == null ? str.dryNext(round(len(mp) * 15 / 60)) : str.rainIn(wetAt * 15)
+  // Air quality and pollen; pollen is null outside the places Open-Meteo forecasts it for.
+  let aq = air == null || !air.ok ? null : air.out.current
+  let aqi = aq == null ? null : num(aq.us_aqi)
+  let aqiColor = aqi == null ? muted : aqi <= 50 ? green : aqi <= 100 ? yellow : aqi <= 150 ? orange : red
+  let pollenAll = aq == null ? [] : [
+    { name: str.grass, v: aq.grass_pollen },
+    { name: str.birch, v: aq.birch_pollen },
+    { name: str.ragweed, v: aq.ragweed_pollen },
+    { name: str.olive, v: aq.olive_pollen },
+    { name: str.mugwort, v: aq.mugwort_pollen },
+    { name: str.alder, v: aq.alder_pollen }
+  ].map(p => { name: p.name, v: p.v == null ? null : round(num(p.v, 0)) })
+  // The worst pollens first, for the card; the rest go on a line of their own.
+  let pollens = pollenAll.filter(p => p.v != null).sortBy(p => -p.v)
+  // Everything else the tile and the screen show, from the forecast already here.
+  let unitShort = imperial ? "mph" : str.kmh
+  let dewPt = cur == null ? null : num(cur.dew_point_2m)
+  let cloudPct = cur == null ? null : num(cur.cloud_cover)
+  let gust = cur == null ? null : num(cur.wind_gusts_10m)
+  let surfaceP = cur == null ? null : num(cur.surface_pressure)
+  let uvMax = daily == null ? null : num(daily.uv_index_max[0])
+  let uvClear = daily == null ? null : num(daily.uv_index_clear_sky_max[0])
+  let feelsHi = daily == null ? null : round(num(daily.apparent_temperature_max[0]))
+  let feelsLo = daily == null ? null : round(num(daily.apparent_temperature_min[0]))
+  let daylight = daily == null ? null : num(daily.daylight_duration[0])
+  let sunshine = daily == null ? null : num(daily.sunshine_duration[0])
+  let rainHours = daily == null ? null : num(daily.precipitation_hours[0])
+  let windMax = daily == null ? null : num(daily.wind_speed_10m_max[0])
+  let gustMax = daily == null ? null : num(daily.wind_gusts_10m_max[0])
+  let windMain = daily == null ? null : dirs[int((num(daily.wind_direction_10m_dominant[0]) + 11.25) / 22.5) % 16]
+  let solar = daily == null ? null : num(daily.shortwave_radiation_sum[0])
+  let et0 = daily == null ? null : num(daily.et0_fao_evapotranspiration[0])
+  let snowToday = daily == null ? null : num(daily.snowfall_sum[0])
+  let cape = hourly == null ? null : num(hourly.cape[hi])
+  let freezeAt = hourly == null ? null : num(hourly.freezing_level_height[hi])
+  let bulb = hourly == null ? null : num(hourly.wet_bulb_temperature_2m[hi])
+  let vpd = hourly == null ? null : num(hourly.vapour_pressure_deficit[hi])
+  let snowDepth = hourly == null ? null : num(hourly.snow_depth[hi])
+  let cloudLo = hourly == null ? null : num(hourly.cloud_cover_low[hi])
+  let cloudMid = hourly == null ? null : num(hourly.cloud_cover_mid[hi])
+  let cloudHi = hourly == null ? null : num(hourly.cloud_cover_high[hi])
 
   onTap: screen()
 
@@ -257,7 +368,7 @@ widget "today" {
     Spacer { height: 1; fill: width; background: alpha(muted, 0.25) }
   }
 
-  component Stat(glyph, label, value, tint = foreground) {
+  component Stat(glyph, label, value, tint = foreground, sub = null) {
     Row {
       gap: 10
       align: center
@@ -270,7 +381,31 @@ widget "today" {
         weight: 1
         Text { text: label; style: label; color: muted; maxLines: 1 }
         Text { text: value; style: body; maxLines: 1 }
+        if sub != null {
+          Text { text: sub; style: small; color: muted; maxLines: 1 }
+        }
       }
+    }
+  }
+
+  // One number and what it is, on the tile's own row.
+  component Mini(label, value, tint = foreground) {
+    Column {
+      gap: 0
+      weight: 1
+      align: center
+      Text { text: label; style: label; color: muted; maxLines: 1; align: center }
+      Text { text: value; style: small; color: tint; maxLines: 1; align: center }
+    }
+  }
+
+  // A line of the screen's own for a number too long for a card.
+  component Detail(label, value) {
+    Row {
+      gap: 12
+      align: center
+      Text { text: label; style: small; color: muted; width: 118; maxLines: 1 }
+      Text { text: value; style: small; weight: 1; align: end; maxLines: 2 }
     }
   }
 
@@ -320,7 +455,29 @@ widget "today" {
         }
       }
       Text { text: "${str.feels} ${round(num(cur.apparent_temperature))}° · ${lower(place)}"; style: small; color: muted; maxLines: 1 }
+      // Rain in the next two hours, when there is any to mention.
+      if nowcast != null && !low {
+        Text { text: nowcast; style: small; color: raining ? cyan : muted; maxLines: 1 }
+      }
       if !low {
+        Spacer { weight: 1 }
+        Spacer { height: 1; fill: width; background: alpha(muted, 0.25) }
+        Spacer { height: 6 }
+        // Wind, gusts, dew point, clouds and air, one small column each.
+        Row {
+          gap: 2
+          Mini { label: str.windWord; value: "${round(num(cur.wind_speed_10m))} ${unitShort}" }
+          if !narrow {
+            Mini { label: str.gust; value: "${round(gust)} ${unitShort}" }
+          }
+          Mini { label: str.dewShort; value: "${round(dewPt)}°" }
+          if !narrow {
+            Mini { label: str.clouds; value: "${round(cloudPct)}%" }
+          }
+          if aqi != null {
+            Mini { label: str.airShort; value: "${round(aqi)}"; tint: aqiColor }
+          }
+        }
         Spacer { weight: 1 }
         Spacer { height: 1; fill: width; background: alpha(muted, 0.25) }
         Spacer { height: 8 }
@@ -396,20 +553,61 @@ widget "today" {
           }
         }
         Text {
-          text: "${str.feels} ${round(num(cur.apparent_temperature))}° · ↑${round(num(daily.temperature_2m_max[0]))}° ↓${round(num(daily.temperature_2m_min[0]))}° · ${lower(place)}, ${lower(country)}"
+          text: "${str.feels} ${round(num(cur.apparent_temperature))}° (${feelsLo}°–${feelsHi}°) · ↑${round(num(daily.temperature_2m_max[0]))}° ↓${round(num(daily.temperature_2m_min[0]))}° · ${lower(place)}, ${lower(country)}"
           style: small
           color: muted
         }
+        // Rain in the next hours, and how much of it.
+        if nowcast != null {
+          Row {
+            gap: 8
+            align: center
+            Text { text: nowcast; style: body; color: raining ? cyan : accent; weight: 1; maxLines: 2 }
+            if rainAhead > 0 {
+              Text { text: "${str.total} ${fixed(rainAhead, 2)} ${imperial ? "in" : "mm"}"; style: small; color: muted; align: end }
+            }
+          }
+        }
         Rule { }
+        // Everything now, a card each.
         Grid {
           columns: 2
           gap: 8
-          Stat { glyph: ""; label: str.wind(windDir); value: "${round(num(cur.wind_speed_10m))} ${imperial ? "mph" : str.kmh}"; tint: cyan }
-          Stat { glyph: ""; label: str.humidity; value: "${round(num(cur.relative_humidity_2m))}%"; tint: blue }
-          Stat { glyph: ""; label: str.rainToday; value: "${round(num(daily.precipitation_probability_max[0]))}% · ${fixed(num(daily.precipitation_sum[0]), 1)} ${imperial ? "in" : "mm"}"; tint: blue }
-          Stat { glyph: ""; label: str.uv; value: "${round(uv)} ${str.uvLevel(uv)}"; tint: uv >= 6 ? red : uv >= 3 ? yellow : green }
-          Stat { glyph: ""; label: str.pressure; value: imperial ? "${fixed(num(cur.pressure_msl) * 0.02953, 2)} inHg" : "${round(num(cur.pressure_msl))} hPa" }
-          Stat { glyph: ""; label: str.visibility; value: imperial ? "${fixed(num(hourly.visibility[hi]) / 1609.344, 1)} mi" : "${fixed(num(hourly.visibility[hi]) / 1000, 1)} km" }
+          Stat { glyph: ""; label: str.windWord; value: "${round(num(cur.wind_speed_10m))} ${unitShort} ${lower(windDir ?? "")}"; tint: cyan; sub: "${str.gust} ${round(gust)}" }
+          Stat { glyph: ""; label: str.humidity; value: "${round(num(cur.relative_humidity_2m))}%"; tint: blue; sub: "${str.dew} ${round(dewPt)}°" }
+          Stat { glyph: ""; label: str.rainToday; value: "${round(num(daily.precipitation_probability_max[0]))}%"; tint: blue; sub: "${fixed(num(daily.precipitation_sum[0]), 1)} ${imperial ? "in" : "mm"} · ${round(rainHours)} h" }
+          Stat { glyph: ""; label: str.uv; value: "${round(uv)} ${str.uvLevel(uv)}"; tint: uv >= 6 ? red : uv >= 3 ? yellow : green; sub: "${str.uvMax} ${round(uvMax)}" }
+          Stat { glyph: ""; label: str.pressure; value: imperial ? "${fixed(num(cur.pressure_msl) * 0.02953, 2)} inHg" : "${round(num(cur.pressure_msl))} hPa"; sub: "${str.surface} ${imperial ? fixed(surfaceP * 0.02953, 2) : round(surfaceP)}" }
+          Stat { glyph: ""; label: str.visibility; value: imperial ? "${fixed(num(hourly.visibility[hi]) / 1609.344, 1)} mi" : "${fixed(num(hourly.visibility[hi]) / 1000, 1)} km"; sub: "${str.clouds} ${round(cloudPct)}%" }
+          if aqi != null {
+            Stat { glyph: ""; label: str.air; value: "${round(aqi)} ${str.aqiLevel(aqi)}"; tint: aqiColor; sub: "pm2.5 ${fixed(num(aq.pm2_5), 1)}" }
+          }
+          if len(pollens) > 0 {
+            Stat { glyph: ""; label: str.pollen; value: "${pollens[0].name} ${pollens[0].v}"; tint: green; sub: "${str.pollenLevel(pollens[0].v)}" }
+          }
+        }
+        Rule { }
+        // The rest, a line each.
+        Text { text: str.more; style: label; color: accent }
+        Column {
+          gap: 6
+          Detail { label: str.clouds; value: "${str.lowCloud} ${round(cloudLo)}% · ${str.midCloud} ${round(cloudMid)}% · ${str.highCloud} ${round(cloudHi)}%" }
+          Detail { label: str.windWord; value: "${str.max} ${round(windMax)} ${unitShort} · ${lower(windMain ?? "")}" }
+          Detail { label: str.gust; value: "${str.now} ${round(gust)} · ${str.max} ${round(gustMax)} ${unitShort}" }
+          Detail { label: str.uvMax; value: "${round(uvMax)} · ${str.clearSky} ${round(uvClear)}" }
+          Detail { label: str.solar; value: "${fixed(solar, 1)} MJ/m² · et₀ ${fixed(et0, 1)} mm" }
+          Detail { label: str.unstable; value: "${round(cape)} J/kg · ${str.freeze} ${round(freezeAt)} m" }
+          Detail { label: str.bulb; value: "${fixed(bulb, 1)}° · vpd ${fixed(vpd, 2)} kPa" }
+          if aq != null {
+            Detail { label: str.air; value: "pm2.5 ${fixed(num(aq.pm2_5), 1)} · pm10 ${fixed(num(aq.pm10), 1)} · co ${round(num(aq.carbon_monoxide))}" }
+            Detail { label: "o₃ · no₂ · so₂"; value: "${round(num(aq.ozone))} · ${fixed(num(aq.nitrogen_dioxide), 1)} · ${fixed(num(aq.sulphur_dioxide), 1)}" }
+          }
+          if len(pollenAll) > 0 {
+            Detail { label: str.pollen; value: "${join(pollenAll.map(p => p.name + " " + (p.v == null ? "—" : p.v)), " · ")}" }
+          }
+          if snowDepth > 0 || snowToday > 0 {
+            Detail { label: str.snow; value: "${round(snowDepth * 100)} cm · ${str.today} ${fixed(snowToday, 1)} cm" }
+          }
         }
         Rule { }
         // The next 24 hours: time, icon and rain chance per step, with the temperature curve under them.
@@ -446,6 +644,54 @@ widget "today" {
               text("${s.rain}%", xs[i], height - 24, size: 10, align: center, color: s.rain >= 30 ? blue : muted)
             }
           }
+          // The same stretch's clouds, then its wind as a line and its gusts above it.
+          if len(steps) > 0 {
+            Text { text: str.clouds; style: label; color: muted; padding: [8, 0, 0, 0] }
+            Canvas {
+              height: 40
+              fill: width
+              let n = max(len(steps), 1)
+              let xs = range(n).map(i => (i + 0.5) * width / n)
+              let ys = steps.map(s => height - 8 - s.cloud / 100 * (height - 18))
+              let pts = range(n + 2).map(i => i == 0 ? [0, height] : i == n + 1 ? [width, height] : [xs[i - 1], ys[i - 1]])
+              path(pts, closed: true, fill: alpha(blue, 0.12))
+              path(xs.map((x, i) => [x, ys[i]]), stroke: blue, width: 1)
+              line(0, height - 8 - (height - 18) / 2, width, height - 8 - (height - 18) / 2, stroke: alpha(muted, 0.2))
+            }
+            Canvas {
+              height: 46
+              fill: width
+              let n = max(len(steps), 1)
+              let xs = range(n).map(i => (i + 0.5) * width / n)
+              let top = max(max(steps.map(s => s.gust)), 1)
+              let wy = steps.map(s => height - 10 - s.wind / top * (height - 26))
+              let gy = steps.map(s => height - 10 - s.gust / top * (height - 26))
+              path(xs.map((x, i) => [x, wy[i]]), stroke: cyan, width: 2)
+              path(xs.map((x, i) => [x, gy[i]]), stroke: orange, width: 1)
+              text("${str.windWord} ${round(num(cur.wind_speed_10m))} ${unitShort}", 2, 8, size: 10, align: start, color: cyan)
+              text("${str.gust} ${round(gustMax)} ${unitShort}", width - 2, 8, size: 10, align: end, color: orange)
+            }
+          }
+        }
+        // Only when rain is actually coming: a bar is how much each 15 minutes holds.
+        if rainAhead > 0 {
+          Rule { }
+          Text { text: str.next2h; style: label; color: accent }
+          Canvas {
+            height: 78
+            fill: width
+            let n = max(len(mp), 1)
+            let peak = max(max(mp), 0.05)
+            for v, i in mp {
+              let bw = width / n
+              let h = max(v, 0) / peak * (height - 34)
+              rect(i * bw + 1, height - 20 - h, bw - 2, h, radius: 2, fill: v > 0 ? blue : alpha(muted, 0.18))
+              rect(i * bw + 1, height - 20, bw - 2, 2, radius: 1, fill: alpha(muted, 0.25))
+              if i % 4 == 0 {
+                text(sub(mins.time[i], 11, 16), i * bw + bw / 2, height - 8, size: 10, align: center, color: muted)
+              }
+            }
+          }
         }
         Rule { }
         // Three days: icon, rain chance and the day's low to high on a shared scale.
@@ -479,11 +725,21 @@ widget "today" {
           Stat { glyph: ""; label: str.sunrise; value: sun[0]; tint: yellow; weight: 1 }
           Stat { glyph: ""; label: str.sunset; value: sun[1]; tint: orange; weight: 1 }
         }
+        Row {
+          gap: 8
+          Stat { glyph: ""; label: str.daylight; value: fmtDuration(daylight); tint: yellow; weight: 1 }
+          Stat { glyph: ""; label: str.sunshine; value: fmtDuration(sunshine); tint: orange; weight: 1 }
+        }
         Stat {
           glyph: get(moonIcons, moonPhase, "")
           label: str.moon
           value: str.phase(moonPhase, moonLit)
           tint: foreground
+        }
+        Row {
+          gap: 8
+          Stat { glyph: ""; label: str.nextFull; value: nextFull; weight: 1 }
+          Stat { glyph: ""; label: str.nextNew; value: nextNew; weight: 1 }
         }
         // yr.no (Norwegian Meteorological Institute): ad-free and worldwide, opened at the forecast's coordinates.
         Row {

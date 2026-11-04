@@ -1,0 +1,247 @@
+widget "notifications" {
+  size: 3x4
+  minSize: 3x3
+  requires { pacman: [] }
+  meta { description: "Your phone's notifications on the home screen, newest first, with a count per app. Tap one to open it, × to dismiss it; tap the tile for all of them by app, and the ones that came before"; version: "1.4"; license: "MIT"; category: "productivity"; owl: 16 }
+
+  // What it says, in the phone's language where it has a set. Apps and their notifications come as they are.
+  strings {
+    en {
+      title: "notifications"; now: "now"; minutes: n => "${n}m"; hours: n => "${n}h"; days: n => "${n}d"
+      allow: "Allow notification access to see them here. Tap to open the setting."
+      loading: "loading…"; caughtUp: "all caught up"; earlier: "earlier"; clear: "clear"; more: n => "+${n} more"
+    }
+    id {
+      title: "notifikasi"; now: "kini"; minutes: n => "${n}m"; hours: n => "${n}j"; days: n => "${n}h"
+      allow: "Izinkan akses notifikasi untuk melihatnya di sini. Ketuk untuk membuka setelan."
+      loading: "memuat…"; caughtUp: "semua sudah dibaca"; earlier: "sebelumnya"; clear: "hapus"; more: n => "+${n} lagi"
+    }
+    es {
+      title: "notificaciones"; now: "ahora"; minutes: n => "${n}m"; hours: n => "${n}h"; days: n => "${n}d"
+      allow: "Permite el acceso a las notificaciones para verlas aquí. Toca para abrir la configuración."
+      loading: "cargando…"; caughtUp: "todo al día"; earlier: "anteriores"; clear: "borrar"; more: n => "+${n} más"
+    }
+    pt {
+      title: "notificações"; now: "agora"; minutes: n => "${n}m"; hours: n => "${n}h"; days: n => "${n}d"
+      allow: "Permita o acesso às notificações para vê-las aqui. Toque para abrir as configurações."
+      loading: "carregando…"; caughtUp: "tudo em dia"; earlier: "anteriores"; clear: "limpar"; more: n => "+${n} mais"
+    }
+    de {
+      title: "benachrichtigungen"; now: "jetzt"; minutes: n => "${n} min"; hours: n => "${n} std"; days: n => "${n} tg"
+      allow: "Erlaube den Zugriff auf Benachrichtigungen, um sie hier zu sehen. Tippe, um die Einstellung zu öffnen."
+      loading: "lädt…"; caughtUp: "alles gelesen"; earlier: "vorher"; clear: "löschen"; more: n => "+${n} weitere"
+    }
+    zh {
+      title: "通知"; now: "刚刚"; minutes: n => "${n}分钟"; hours: n => "${n}小时"; days: n => "${n}天"
+      allow: "允许访问通知后就能在这里看到它们。点按打开设置。"
+      loading: "正在加载…"; caughtUp: "全部看完了"; earlier: "更早"; clear: "清除"; more: n => "还有 ${n} 条"
+    }
+  }
+
+  // {available, count, items: [{key, app, package, title, text, time, clearable}]}, newest first,
+  // without ongoing ones (music, downloads) and group headers. Needs notification access.
+  source n = android.notifications
+  source now = clock every 1m
+
+  // Everything seen lately, kept across restarts: the ones that left the shade (dismissed, cleared
+  // by their app or expired) are shown as "earlier", so the tile has something to say when nothing waits.
+  state seen = [] persist
+  on n first {
+    if value != null && value.available != false {
+      let cur = (value.items ?? []).map(i => {key: i.key, app: i.app, package: i.package, title: i.title ?? "", text: sub(i.text ?? "", 0, 300), time: i.time})
+      seen = flatten([cur, seen.filter(s => !any(cur, c => c.key == s.key))]).sortBy(s => -(s.time ?? 0)).take(40)
+    }
+  }
+  on n {
+    if value != null && value.available != false {
+      let cur = (value.items ?? []).map(i => {key: i.key, app: i.app, package: i.package, title: i.title ?? "", text: sub(i.text ?? "", 0, 300), time: i.time})
+      seen = flatten([cur, seen.filter(s => !any(cur, c => c.key == s.key))]).sortBy(s => -(s.time ?? 0)).take(40)
+    }
+  }
+
+  let items = n.items ?? []
+  let past = seen.filter(s => !any(items, i => i.key == s.key)).sortBy(s => -(s.time ?? 0))
+  let allowed = n == null || n.available != false
+  let apps = items.map(i => i.app).unique().map(a => {app: a, count: count(items, i => i.app == a)})
+  // A row is ~46dp, the header and app chips ~56dp.
+  let rows = tileHeight == null ? 3 : clamp(floor((tileHeight - 64) / 46), 1, 12)
+  let visible = items.take(rows)
+  // A past line in the tile is one line of ~29dp, under a header of ~54dp.
+  let pastRows = tileHeight == null ? 3 : clamp(floor((tileHeight - 54) / 29), 1, 12)
+  let palette = [accent, blue, magenta, cyan, green, orange, yellow, red]
+
+  onTap: screen()
+
+  component Dot(app, d = 22) {
+    Box {
+      size: d
+      radius: d / 2
+      background: alpha(palette[len(app) % 8], 0.22)
+      align: center
+      Text { text: upper(sub(app, 0, 1)); fontSize: d * 0.5; bold: true; color: palette[len(app) % 8]; align: center }
+    }
+  }
+
+  component Item(i, now, full = false) {
+    Row {
+      align: top
+      gap: 8
+      onTap: notification("open", i.key)
+      Dot { app: i.app }
+      Column {
+        weight: 1
+        gap: 0
+        let age = now - i.time
+        Text { text: i.time == null ? lower(i.app) : "${lower(i.app)} · ${age < 60 ? str.now : age < 3600 ? str.minutes(floor(age / 60)) : age < 86400 ? str.hours(floor(age / 3600)) : str.days(floor(age / 86400))}"; style: label; color: muted; maxLines: 1 }
+        if i.title != "" {
+          Text { text: i.title; style: small; bold: true; maxLines: 1 }
+        }
+        if i.text != "" {
+          Text { text: i.text; style: small; color: full ? foreground : muted; maxLines: full ? 4 : 1 }
+        }
+      }
+      if i.clearable == true {
+        Box {
+          size: 24
+          align: center
+          onTap: notification("dismiss", i.key)
+          Text { text: "󰅖"; font: icon; fontSize: 14; color: muted; align: center }
+        }
+      }
+    }
+  }
+
+  Column {
+    gap: 8
+    Row {
+      align: center
+      Text { text: str.title; style: muted; weight: 1 }
+      if len(items) > 0 {
+        Text { text: "${n.count}"; style: label; bold: true; color: accent; background: alpha(accent, 0.2); padding: [7, 1]; radius: 9; align: center; width: len("${n.count}") * 7 + 16 }
+      }
+    }
+    if !allowed {
+      Text { text: str.allow; style: small; maxLines: 4; onTap: notification("open", "") }
+    } else {
+      if n == null {
+        Text { text: str.loading; style: small; color: muted }
+      } else {
+        if len(items) == 0 {
+          if len(past) == 0 {
+            Column {
+              weight: 1
+              align: center
+              justify: center
+              gap: 4
+              Text { text: "󰄬"; font: icon; fontSize: 28; color: green; align: center }
+              Text { text: str.caughtUp; style: small; color: muted; align: center }
+            }
+          } else {
+            Column {
+              gap: 8
+              Row {
+                align: center
+                Text { text: str.earlier; style: label; color: muted; weight: 1 }
+                Text { text: "${len(past)}"; style: label; color: muted }
+              }
+              for p in past.take(pastRows) key p.key {
+                PastLine { i: p; now: now }
+              }
+            }
+          }
+        } else {
+          if len(apps) > 1 {
+            Flow {
+              gap: 4
+              for a in apps.take(4) key a.app {
+                Text { text: "${lower(a.app)} ${a.count}"; style: label; color: palette[len(a.app) % 8]; background: alpha(palette[len(a.app) % 8], 0.15); padding: [6, 1]; radius: 8; maxLines: 1; align: center; width: min(len("${lower(a.app)} ${a.count}") * 6.7 + 12, 150) }
+              }
+            }
+          }
+          Column {
+            gap: 10
+            for i in visible key i.key {
+              Item { i: i; now: now }
+            }
+          }
+          if len(items) > len(visible) {
+            Text { text: str.more(len(items) - len(visible)); style: label; color: muted }
+          }
+        }
+      }
+    }
+  }
+
+  // A notification that's gone from the shade: no × , and a tap opens its app instead.
+  component PastLine(i, now) {
+    Row {
+      align: center
+      gap: 8
+      onTap: { if i.package != null { androidApp(i.package) } }
+      Dot { app: i.app; d: 16 }
+      let age = now - i.time
+      let when = i.time == null ? "" : age < 60 ? str.now : age < 3600 ? str.minutes(floor(age / 60)) : age < 86400 ? str.hours(floor(age / 3600)) : str.days(floor(age / 86400))
+      Text { text: "${lower(i.app)} · ${when} · ${(i.title ?? "") != "" ? i.title : i.text}"; style: label; color: muted; maxLines: 1; weight: 1 }
+    }
+  }
+
+  component PastItem(i, now) {
+    Row {
+      align: top
+      gap: 8
+      onTap: { if i.package != null { androidApp(i.package) } }
+      Dot { app: i.app; d: 18 }
+      Column {
+        weight: 1
+        gap: 0
+        let age = now - i.time
+        Text { text: i.time == null ? lower(i.app) : "${lower(i.app)} · ${age < 60 ? str.now : age < 3600 ? str.minutes(floor(age / 60)) : age < 86400 ? str.hours(floor(age / 3600)) : str.days(floor(age / 86400))}"; style: label; color: muted; maxLines: 1 }
+        if i.title != "" {
+          Text { text: i.title; style: small; color: muted; maxLines: 1 }
+        }
+        if i.text != "" {
+          Text { text: i.text; style: small; color: alpha(muted, 0.85); maxLines: 1 }
+        }
+      }
+    }
+  }
+
+  screen {
+    title: str.title
+    Column {
+      scroll: true
+      gap: 12
+      if len(items) == 0 && len(past) == 0 {
+        Text { text: str.caughtUp; style: body; color: muted }
+      }
+      for a in apps key a.app {
+        Column {
+          gap: 10
+          Row {
+            align: center
+            gap: 8
+            Dot { app: a.app; d: 26 }
+            Text { text: a.app; style: body; bold: true; weight: 1; maxLines: 1 }
+            Text { text: "${a.count}"; style: label; color: muted; width: 32; align: end }
+          }
+          for i in items.filter(x => x.app == a.app) key i.key {
+            Item { i: i; now: now; full: true }
+          }
+          Spacer { height: 1; fill: width; background: alpha(muted, 0.2) }
+        }
+      }
+      if len(past) > 0 {
+        Row {
+          align: center
+          gap: 8
+          Text { text: str.earlier; style: label; color: muted; weight: 1 }
+          Text { text: str.clear; style: label; color: muted; onTap: { haptic(); seen = seen.filter(s => any(items, i => i.key == s.key)) } }
+        }
+        for p in past key p.key {
+          PastItem { i: p; now: now }
+        }
+      }
+      Spacer { height: 12 }
+    }
+  }
+}

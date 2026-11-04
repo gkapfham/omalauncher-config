@@ -1,0 +1,305 @@
+widget "mail" {
+  page: 5
+  order: 1
+  size: 8x10
+  minSize: 3x3
+  padding: 12
+  requires { pacman: ["python", "nodejs"] }
+
+  meta {
+    owl: 17
+    description: "Your newest Gmail messages, the ones that seem to want an answer first, each opening in Gmail with a tap, and a refresh button. owl-mail fetches them itself, so it works with pi closed"
+    version: "1.1"
+    license: "MIT"
+    category: "productivity"
+  }
+
+  // owl-mail (in ~/.local/bin) asks Gmail with the token the pi google-workspace skill keeps, and prints the
+  // messages as JSON, each marked `reply` when it looks like a person is waiting for an answer. No account yet:
+  // it prints `error`, which the tile shows with a tap that signs one in. One retry after a pause, because a
+  // token refresh or the network can fail once and then work again.
+  source mb = cmd("owl-mail json --limit 30 || { sleep 5; owl-mail json --limit 30; }") every 5m json timeout 90s status
+  source now = clock every 1m
+
+  // The last good answer, kept so that a fetch that fails leaves the list where it is instead of emptying
+  // the tile; `offline` then says how old what's shown is.
+  state last = null persist
+  // The messages already reminded about, so one still waiting doesn't notify again: only a new one does.
+  state known = [] persist
+  // When the last tap on refresh was, in seconds: the tile says "checking" until the answer comes or a minute
+  // passes without one.
+  state asked = 0
+
+  on mb first {
+    if mb.ok {
+      known = (mb.out.msgs ?? []).filter(m => m.reply).map(m => m.id)
+      last = mb.out
+    }
+  }
+
+  on mb {
+    asked = 0
+    if mb.ok {
+      // Read before `known` changes: these are the ones not reminded about yet.
+      let fresh = (mb.out.msgs ?? []).filter(m => m.reply && !contains(known, m.id))
+      if len(fresh) > 0 {
+        notify(
+          "mail — needs a reply",
+          len(fresh) == 1 ? "${first(fresh).from}: ${first(fresh).subj}" : "${len(fresh)} emails to answer, the newest from ${first(fresh).from}",
+        )
+      }
+      known = (mb.out.msgs ?? []).filter(m => m.reply).map(m => m.id)
+      last = mb.out
+    }
+  }
+
+  // `raw` is what to draw: this fetch's answer, or the last one that worked. `problem` is why the last fetch
+  // failed, `stale` that we're showing older mail because of it, and `failed` that there's nothing to show.
+  let raw = mb != null && mb.ok ? mb.out : last
+  let problem = mb == null || mb.ok ? null : (mb.out.error ?? mb.err ?? "offline")
+  let stale = problem != null && last != null
+  let failed = problem != null && last == null ? problem : null
+  let since = raw != null && raw.at != null ? fmtTime(raw.at, "HH:mm") : null
+  let staleNote = since == null ? "can't reach Gmail — showing what I last had" : "can't reach Gmail — showing the last check, ${since}"
+  let checking = asked > 0 && now != null && now - asked < 60
+  let msgs = raw.msgs ?? []
+  let unread = raw == null ? 0 : (raw.unread ?? len(msgs.filter(m => m.unread)))
+  let total = raw == null ? null : raw.total
+  let todayCount = raw == null ? null : raw.today
+  let account = raw == null ? null : raw.account
+  // The reminders first, then the rest of the inbox.
+  let replies = msgs.filter(m => m.reply)
+  let others = msgs.filter(m => !m.reply)
+  let wide = (tileWidth ?? 360) >= 270
+  let senderWidth = clamp((tileWidth ?? 360) * 0.3, 48, 122)
+  let summary = checking
+    ? "checking Gmail…"
+    : stale
+      ? "can't reach Gmail · ${since ?? "…"}"
+      : wide
+        ? "${total ?? 0} in inbox · ${todayCount ?? 0} today · ${since ?? "…"}"
+        : "${total ?? 0} in inbox · ${since ?? "…"}"
+
+  // How many messages the tile can show, counted in dp so that a row is never cut off at the bottom: 12 of
+  // padding twice, the 24 header, the 20 summary line, a 16 heading, a 21 message row, the 2 between each pair
+  // of them, and 4 to spare for a phone whose text runs taller than this one's. Leave up to 3 rows for the
+  // inbox when the reminders would take them all.
+  let heads = (len(replies) > 0 ? 1 : 0) + (len(others) > 0 ? 1 : 0)
+  let room = clamp(floor(((tileHeight ?? 460) - 24 - 24 - 20 - 4 - 18 * heads) / 23), 0, 60)
+  let replyShown = room <= 0 ? [] : replies.take(clamp(room - min(len(others), 3), 1, 60))
+  let restShown = others.take(clamp(room - len(replyShown), 0, 60))
+  // A list long enough to fill the tile spreads the leftover height over its rows, so the last one ends at the
+  // tile's padding rather than leaving a gap below it; a short one keeps its 21 each and stays compact.
+  let shownCount = len(replyShown) + len(restShown)
+  let fill = shownCount >= 6 && (tileHeight ?? 460) / shownCount <= 34
+
+  // One message on the tile: its unread dot, who sent it, what it's about, and when.
+  component Msg(m, fill) {
+    Row {
+      height: fill ? null : 21
+      weight: fill ? 1 : null
+      gap: 7
+      align: center
+      Box { width: 6; height: 6; radius: 3; background: m.unread ? accent : muted; opacity: m.unread ? 1 : 0.4 }
+      Text {
+        text: m.from
+        fontSize: 12
+        width: senderWidth
+        maxLines: 1
+        color: m.unread || m.reply ? foreground : muted
+        fontWeight: m.unread ? 600 : 400
+      }
+      Text { text: m.subj; fontSize: 12; weight: 1; maxLines: 1; color: m.unread || m.reply ? foreground : muted }
+      if wide {
+        Text { text: m.when; font: mono; fontSize: 10; color: muted; width: 46; align: end; maxLines: 1 }
+      }
+    }
+  }
+
+  // A heading over a group of messages, with how many there are.
+  component Heading(title, count, tint) {
+    Row {
+      height: 16
+      gap: 6
+      align: center
+      Text { text: title; font: mono; fontSize: 9; color: tint; letterSpacing: 1; maxLines: 1; weight: 1 }
+      Text { text: "${count}"; font: mono; fontSize: 9; color: muted; maxLines: 1 }
+    }
+  }
+
+  component Stat(value, label) {
+    Column {
+      gap: 0
+      Text { text: value == null ? "…" : "${value}"; font: mono; fontSize: 17; color: foreground; maxLines: 1 }
+      Text { text: label; font: mono; fontSize: 9; color: muted; letterSpacing: 1; maxLines: 1 }
+    }
+  }
+
+  // One message in the screen behind the tile: who, when, what, the start of it, and why it wants an answer.
+  // A tap opens Gmail itself, resumed where you left it; a long press opens the thread in the browser, which
+  // lands on the message even when Gmail's app doesn't.
+  component MailRow(m, hint) {
+    Box {
+      padding: [0, 12, 0, 12]
+      onTap: {
+        haptic()
+        androidApp("com.google.android.gm")
+      }
+      onLongPress: url(m.link)
+      Row {
+        gap: 8
+        padding: [0, 9, 0, 8]
+        align: top
+        // The dot lines up with the first line of a subject that may take two.
+        Box { width: 8; height: 8; radius: 4; background: m.unread ? accent : muted; opacity: m.unread ? 1 : 0.4; offset: [0, 6] }
+        Column {
+          weight: 1
+          gap: 2
+          Row {
+            gap: 8
+            Text {
+              text: m.from
+              fontSize: 13
+              weight: 1
+              maxLines: 1
+              color: m.unread || m.reply ? foreground : muted
+              fontWeight: m.unread ? 600 : 400
+            }
+            if hint && m.why != "" {
+              Text { text: m.why; font: mono; fontSize: 10; color: orange; maxLines: 1 }
+            }
+            Text { text: m.when; font: mono; fontSize: 11; color: muted; maxLines: 1 }
+          }
+          Text {
+            text: m.subj
+            fontSize: 15
+            maxLines: 2
+            color: m.unread || m.reply ? foreground : muted
+            fontWeight: m.unread ? 600 : 400
+          }
+          if m.snip != "" {
+            Text { text: m.snip; style: small; color: muted; maxLines: 2 }
+          }
+        }
+      }
+    }
+  }
+
+  // The button that checks Gmail again now, on the tile and in the screen.
+  component Check(label, size) {
+    Box {
+      padding: [8, 0]
+      radius: 6
+      onTap: {
+        haptic()
+        asked = now
+        refresh()
+      }
+      Text { text: label; font: mono; fontSize: size; color: checking ? muted : accent; maxLines: 1 }
+    }
+  }
+
+  onTap: screen()
+
+  Column {
+    gap: 2
+    Row {
+      height: 24
+      gap: 6
+      align: center
+      Text { text: "mail"; font: mono; fontSize: 12; color: muted; maxLines: 1; letterSpacing: 1 }
+      if unread > 0 {
+        Text { text: "${unread} new"; font: mono; fontSize: 12; color: accent; maxLines: 1 }
+      }
+      // A narrow tile keeps the heading short, so the button beside it always has room.
+      if len(replies) > 0 && wide {
+        Text { text: "${len(replies)} to answer"; font: mono; fontSize: 12; color: orange; maxLines: 1 }
+      }
+      Box { weight: 1 }
+      Check { label: "↻"; size: 16 }
+    }
+    if failed != null {
+      Text {
+        text: contains(failed, "no account") ? "no Google account yet — tap to sign in" : failed
+        style: small
+        color: muted
+        maxLines: 3
+        onTap: terminal("owl-mail login")
+      }
+    } else if raw == null {
+      Text { text: "loading…"; style: small; color: muted }
+    } else if len(msgs) == 0 {
+      Text { text: "nothing new in the inbox"; style: small; color: muted }
+    } else {
+      Text { text: summary; font: mono; fontSize: 13; color: stale ? orange : muted; maxLines: 1 }
+      if len(replies) > 0 {
+        Heading { title: "needs a reply"; count: len(replies); tint: orange }
+        for m in replyShown key m.id {
+          Msg { m: m; fill: fill }
+        }
+      }
+      if len(others) > 0 {
+        Heading { title: "inbox"; count: len(others); tint: muted }
+        for m in restShown key m.id {
+          Msg { m: m; fill: fill }
+        }
+      }
+    }
+  }
+
+  screen {
+    title: "mail"
+    if failed != null {
+      Column {
+        gap: 10
+        Text { text: failed; style: body; maxLines: 6 }
+        Text { text: "owl-mail login"; font: mono; style: body; color: accent; onTap: terminal("owl-mail login") }
+      }
+    } else {
+      Column {
+        scroll: true
+        gap: 0
+        onPull: refresh()
+        Row {
+          gap: 18
+          padding: [4, 12, 10, 12]
+          align: end
+          Stat { value: unread; label: "unread" }
+          Stat { value: todayCount; label: "today" }
+          Stat { value: total; label: "in inbox" }
+          Box { weight: 1 }
+          Check { label: checking ? "checking…" : "check now"; size: 12 }
+        }
+        if account != null {
+          Text { text: account; font: mono; fontSize: 10; color: muted; padding: [0, 12, 8, 12]; maxLines: 1 }
+        }
+        if stale {
+          Text { text: staleNote; style: small; color: orange; padding: [0, 12, 8, 12] }
+        }
+        if len(replies) > 0 {
+          Box { padding: [0, 12, 0, 12] }
+          Heading { title: "needs a reply"; count: len(replies); tint: orange }
+          for m in replies key m.id {
+            MailRow { m: m; hint: true }
+          }
+          Box { height: 12 }
+        }
+        if len(others) > 0 {
+          Box { padding: [0, 12, 0, 12] }
+          Heading { title: "inbox"; count: len(others); tint: muted }
+          for m in others key m.id {
+            MailRow { m: m; hint: false }
+          }
+        }
+        Text {
+          text: "tap a message to open Gmail · hold it for the browser"
+          font: mono
+          fontSize: 10
+          color: muted
+          padding: [8, 12, 20, 12]
+          maxLines: 2
+        }
+      }
+    }
+  }
+}

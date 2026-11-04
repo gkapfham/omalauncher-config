@@ -1,7 +1,7 @@
 widget "netbird" {
-  size: 3x3
+  size: 8x5
   minSize: 2x1
-  meta { owl: 12; description: "Whether this phone's NetBird VPN is on, the exit node it routes through and its public IP (ipinfo.io), and your net's peers via the NetBird API, with their exit nodes switched on or off"; version: "2.0"; license: "MIT"; category: "system" }
+  meta { owl: 12; description: "Whether this phone's NetBird VPN is on, the exit node it routes through and its public IP (ipinfo.io), and your net's peers via the NetBird API, with their exit nodes switched on or off"; version: "2.1"; license: "MIT"; category: "system" }
 
   requires { pacman: ["iproute2"] }
 
@@ -15,11 +15,11 @@ widget "netbird" {
   state busy = ""           // the peer whose exit node is being switched
   state routeRes = null     // the routes endpoint's answer
 
-  // A net of your own: change api.netbird.io below to its management address, https://netbird.example.com/api.
+  // NetBird cloud. A token is a personal access token from the dashboard, never a setup key (those add peers).
   source api = http(token == null ? null : "https://api.netbird.io/api/peers", {Authorization: "Token ${token}"}) every 1m timeout 15s json status
   source routeList = http(token == null ? null : "https://api.netbird.io/api/routes", {Authorization: "Token ${token}"}) every 1m timeout 15s json status
-  // NetBird's tunnel is an interface with an address in 100.64.0.0/10 (wt0). Android usually keeps it out
-  // of this shell's reach, so it only ever proves the VPN is on, never that it's off.
+  // NetBird's tunnel is an interface with an address in 100.64.0.0/10 (wt0). Some Android setups keep it out
+  // of this shell's reach, so it only ever proves the VPN is on, never that it's off; the API covers that.
   source local = cmd("ip -br -4 addr show") every 10s status
   // Where this phone's traffic reaches the internet (through the exit node when one is used).
   source pub = http("https://ipinfo.io/json") every 5m timeout 10s json
@@ -28,8 +28,9 @@ widget "netbird" {
   let hasKey = token != null
   // What was typed or pasted, with any spaces and line breaks taken out.
   let clean = join(words(draft), "")
-  let draftError = clean == "" ? "Paste a token first." : ""
-  let looksCloud = startsWith(clean, "nbp_")
+  let draftError = clean == "" ? "Paste a token first."
+    : !startsWith(clean, "nbp_") ? "That isn't a personal access token: cloud ones start with nbp_ (a setup key adds a peer, it doesn't list them)."
+    : ""
 
   let localIp = local == null || !local.ok ? null : lines(local.out).map(l => words(l)).filter(w => len(w) > 2).map(w => split(w[2], "/")[0]).find(a => split(a, ".")[0] == "100" && num(split(a, ".")[1]) >= 64 && num(split(a, ".")[1]) < 128)
 
@@ -93,8 +94,12 @@ widget "netbird" {
   let vpnOn = localIp != null || (me != null && me.connected == true)
   let myIp = localIp ?? (me == null ? "" : me.ip ?? "")
   let needPick = localIp == null && me == null && apiOk
-  let exitLabel = exitPeer == null ? "none" : exitPeer.name ?? "?"
+  // "none" only when the routes are known: with no token nothing says which exit node is in use.
+  let exitLabel = exitPeer != null ? exitPeer.name ?? "?" : routeList != null && routeList.ok ? "none" : "…"
   let online = peers.count(d => d.connected == true)
+  // Who is up, for the tile: the peers the net has connected right now.
+  let onNames = rows.filter(d => d.on).sortBy(d => (d.mine ? "0" : "1") + lower(d.name)).map(d => d.name)
+  let onLine = len(onNames) == 0 ? "on: none" : "on: " + join(take(onNames, 4), " · ") + (len(onNames) > 4 ? " +${len(onNames) - 4}" : "")
   let place = pub == null || pub.ip == null ? "" : "${pub.ip}  ·  ${pub.city ?? "?"}, ${pub.country ?? "?"}"
   let problem = !hasKey ? "add a token" : api == null ? null : rejected ? "token rejected" : !api.ok ? "API error ${api.code}" : null
   let routeMsg = routeRes == null || routeRes.ok ? "" : routeRes.out.message ?? ((routeRes.err ?? "") == "" ? "the API refused it" : routeRes.err)
@@ -155,6 +160,7 @@ widget "netbird" {
       if problem != null {
         Text { text: problem; style: small; color: hasKey ? red : yellow; maxLines: 1 }
       }
+      Text { text: onLine; style: small; color: dim; maxLines: 1; visible: apiOk && h >= 175 }
       Spacer { weight: 1 }
       if !vpnOn && !needPick {
         Button { text: "turn on"; color: accent; onTap: androidApp("io.netbird.client") }
@@ -175,6 +181,7 @@ widget "netbird" {
       Text { text: "exit: ${exitLabel}"; style: small; color: exitPeer != null ? accent : dim; maxLines: 1 }
     }
     Text { text: pub.city == null ? "" : "${pub.city}, ${pub.country}"; style: small; color: dim; maxLines: 1; visible: roomy && pub.city != null }
+    Text { text: onLine; style: small; color: dim; maxLines: 1; visible: apiOk }
     Spacer { weight: 1 }
     if problem != null {
       Text { text: problem; style: small; color: hasKey ? red : yellow; maxLines: 1 }
@@ -226,17 +233,15 @@ widget "netbird" {
         } else {
           Text { text: "To list your net's peers, create a personal access token (not a setup key) at app.netbird.io → Team → your user (or a service user) → Create token, and paste it here:"; style: small }
         }
-        Input { placeholder: "nbp_…"; password: true; focus: !hasKey; onChange: { draft = value; keyMsg = "" }; onSubmit: { keyMsg = draftError; if draftError == "" { token = clean }; refresh() } }
-        if keyMsg != "" {
-          Text { text: keyMsg; style: small; color: yellow }
-        }
+        Input { placeholder: "nbp_…"; password: true; focus: !hasKey; onChange: { draft = value; keyMsg = "" }; onSubmit: { keyMsg = clean == "" ? "Paste a token first." : ""; if draftError == "" { token = clean }; refresh() } }
         Row {
           gap: 8
-          Button { text: "save token"; onTap: { keyMsg = draftError; if draftError == "" { token = clean }; refresh() } }
+          Button { text: "save token"; onTap: { keyMsg = clean == "" ? "Paste a token first." : ""; if draftError == "" { token = clean }; refresh() } }
           Button { text: "create token"; color: dim; onTap: url("https://app.netbird.io/team") }
         }
-        if clean != "" && !looksCloud {
-          Text { text: "Cloud tokens start with nbp_; a self-hosted net's tokens can look different, and its address goes in place of api.netbird.io in this file."; style: small; color: dim }
+        // A token that can't be one says why as it's typed; the button says so when nothing was typed.
+        if keyMsg != "" || (clean != "" && draftError != "") {
+          Text { text: keyMsg != "" ? keyMsg : draftError; style: small; color: yellow }
         }
       } else {
         Row {

@@ -14,7 +14,7 @@ widget "backup" {
     category: "system"
   }
 
-  requires { pacman: ["python", "nodejs", "git", "util-linux", "zstd", "tar", "fontconfig"] }
+  requires { pacman: ["python", "nodejs", "npm", "git", "util-linux", "zstd", "tar", "fontconfig"] }
 
   source st = file("~/.cache/owl-config/status.json") json
   source bl = file("~/.cache/owl-config/backups.json") json
@@ -30,6 +30,13 @@ widget "backup" {
   let stateColor = st == null ? muted : st.state == "error" ? red : st.state == "ok" ? green : yellow
   let last = len(bl ?? []) > 0 ? bl[0] : null
   let inside = cs != null && cs.id == viewing ? cs : null
+  let saved = bl ?? []
+  let kept = len(saved)
+  let bytesKept = sum(saved.map(b => b.size ?? 0))
+  let when = last == null ? "" : fmtAgo(last.at, now)
+  // The tile shows as much as it has room for, so it keeps working when it's resized.
+  let tall = (tileHeight ?? 0) >= 175
+  let earlierFit = clamp(floor(((tileHeight ?? 0) - 175) / 28), 0, 6)
 
   // First open with no cached list (a new install): fetch it once.
   on bl first {
@@ -45,16 +52,44 @@ widget "backup" {
 
   Column {
     fill: true
-    gap: 4
+    gap: 3
     Row {
       Text { text: "backup"; style: muted; weight: 1 }
       Text { text: st == null ? "ready" : st.state; style: small; color: stateColor }
     }
     if last != null {
-      Text { text: fmtTime(last.at, "d MMM"); maxLines: 1 }
-      Text { text: fmtTime(last.at, "HH:mm") + " · " + fmtBytes(last.size); style: small; color: muted; maxLines: 1 }
+      Row {
+        align: end
+        gap: 8
+        Text { text: fmtTime(last.at, "d MMM"); style: title; weight: 1; maxLines: 1 }
+        Text { text: fmtTime(last.at, "HH:mm"); style: small; color: muted }
+      }
+      Text {
+        text: (when == "now" ? "just now" : when + " ago") + (last.size != null ? " · " + fmtBytes(last.size) : "")
+        style: small
+        color: muted
+        maxLines: 1
+      }
     } else {
       Text { text: "no backups yet"; style: small; color: muted }
+    }
+    if st != null && st.state == "error" {
+      Text { text: st.message; style: small; color: red; maxLines: 2 }
+    }
+    if tall && kept > 0 {
+      Text { text: "${kept} saved · " + fmtBytes(bytesKept); style: small; color: muted; maxLines: 1 }
+    }
+    if tall && earlierFit > 0 && kept > 1 {
+      Text { text: "earlier"; style: label }
+      for b in saved.drop(1).take(earlierFit) key b.id {
+        Row {
+          fill: width
+          gap: 8
+          align: center
+          Text { text: fmtTime(b.at, "EEE d MMM"); style: small; color: muted; weight: 1; maxLines: 1 }
+          Text { text: fmtBytes(b.size ?? 0); style: small; color: muted }
+        }
+      }
     }
     Spacer { weight: 1 }
     Button {
