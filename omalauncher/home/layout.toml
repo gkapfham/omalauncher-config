@@ -49,8 +49,3 @@ tiles = [
 tiles = [
   { widget = "market-simonschubert-hacker-news.owl", x = 0, y = 0, w = 8, h = 15 },
 ]
-
-[[page]]
-tiles = [
-  { widget = "zz-hn-debug.owl", x = 0, y = 0, w = 6, h = 4 },
-]

@@ -247,9 +247,9 @@ face "omarchy" {
       Spacer { weight: 1 }
       // The clock: a tap or a long press opens its menu, as the bar's clock does in Omarchy. A long press is the
       // face's own, so a node has to take it: without this one, it would open home's menu instead.
-      Box {
+      Row {
         align: center
-        padding: [10, 2]
+        padding: [6, 2]
         Text {
           text: fmtTime(now, "EEE d  HH:mm")
           font: mono
@@ -261,7 +261,7 @@ face "omarchy" {
         Popup {
           visible: clockMenu
           onDismiss: clockMenu = false
-          width: 260
+          width: 280
           gap: 10
           padding: [14, 12]
           background: glass
@@ -272,14 +272,14 @@ face "omarchy" {
           Text { text: fmtTime(now, "EEEE d MMMM"); font: mono; fontSize: 12; color: muted; maxLines: 1 }
           Box { height: 1; fill: width; background: ink }
           Row {
-            gap: 12
+            gap: 10
             align: center
-            Text { text: "alarm"; font: mono; fontSize: 12; color: accent; width: 64; maxLines: 1 }
+            Text { text: "alarm"; font: mono; fontSize: 12; color: accent; width: 76; maxLines: 1 }
             Text { text: al.set ? fmtTime(al.time, "EEE HH:mm") : "none"; font: mono; fontSize: 12; weight: 1; maxLines: 1 }
             if al.set { Text { text: "in " + fmtDuration(al.time - now); font: mono; fontSize: 11; color: muted; maxLines: 1 } }
           }
           Row {
-            gap: 12
+            gap: 10
             align: center
             onTap: {
               clockMenu = false
@@ -289,7 +289,7 @@ face "omarchy" {
                 androidApp(clockApp.key)
               }
             }
-            Text { text: "clock"; font: mono; fontSize: 12; color: accent; width: 64; maxLines: 1 }
+            Text { text: "clock"; font: mono; fontSize: 12; color: accent; width: 76; maxLines: 1 }
             Text {
               text: clockApp == null && !(al.set && al.app != null) ? "no clock app" : "open"
               font: mono
@@ -301,10 +301,10 @@ face "omarchy" {
             Text { text: "›"; font: mono; fontSize: 12; color: muted }
           }
           Row {
-            gap: 12
+            gap: 10
             align: center
             onTap: { clockMenu = false; calendar("open") }
-            Text { text: "calendar"; font: mono; fontSize: 12; color: accent; width: 64; maxLines: 1 }
+            Text { text: "calendar"; font: mono; fontSize: 12; color: accent; width: 76; maxLines: 1 }
             Text { text: "today"; font: mono; fontSize: 12; weight: 1; maxLines: 1 }
             Text { text: "›"; font: mono; fontSize: 12; color: muted }
           }
