@@ -1,0 +1,85 @@
+widget "hacker news" {
+  meta { description: "The Hacker News front page with points and comments, and the week's top stories as you ask for more; tap a story to read it"; version: "1.4"; license: "MIT"; category: "news"; owl: 17 }
+  size: 6x4
+  minSize: 4x3
+
+  // The front page, and under it the week's top stories, as many as you've asked for. Each fetch asks for the
+  // whole list at once, so a pull to refresh starts over from the front page instead of keeping what piled up.
+  state want = 20
+  state loadingUntil = 0
+  state refreshedAt = 0
+
+  source now = clock every 1s
+  let since = floor(now / 86400) * 86400 - 7 * 86400
+  // The front page changes all day, so it's fetched every few minutes; a pull fetches it at once.
+  source front = http("https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=30") every 5m json timeout 15s
+  // page 0 is the top of the week: asking for more asks for a longer list, not for a page further down.
+  source extra = http("https://hn.algolia.com/api/v1/search?tags=story&numericFilters=created_at_i%3E${int(since)}&hitsPerPage=${int(want)}&page=0") every 15m json timeout 15s
+
+  on front first { refreshedAt = now }
+  on front { refreshedAt = now }
+  on extra first { loadingUntil = 0 }
+  on extra { loadingUntil = 0 }
+
+  let front_ids = (front.hits ?? []).map(h => h.objectID)
+  let more = (extra.hits ?? []).filter(h => indexOf(front_ids, h.objectID) < 0)
+  let stories = ((front.hits ?? []) + more).map(h => {
+    id: h.objectID, title: h.title, points: h.points, comments: h.num_comments ?? 0,
+    url: h.url ?? "https://news.ycombinator.com/item?id=${h.objectID}",
+    site: split(match(h.url ?? "", "^https?://(?:www[.])?([^/]*)")[0] ?? "", "/")[0]
+  })
+  let loading = now < loadingUntil
+  let canMore = extra == null || len(extra.hits ?? []) < (extra.nbHits ?? 0)
+
+  onTap: url("https://news.ycombinator.com")
+
+  Column {
+    gap: 4
+    Row {
+      gap: 8
+      Text { text: "hacker news"; style: muted; color: orange; weight: 1 }
+      // How long ago the front page came in, so a list that stopped refreshing shows it.
+      if refreshedAt > 0 { Text { text: fmtAgo(refreshedAt, now); fontSize: 10; color: muted } }
+    }
+    Column {
+      scroll: true
+      lazy: true
+      weight: 1
+      gap: 6
+      // Down starts over: the front page again, and the week's top 20 under it.
+      onPull: {
+        want = 20
+        loadingUntil = 0
+        refresh()
+      }
+      for s in stories key s.id {
+        Column {
+          gap: 0
+          onTap: url(s.url)
+          Text { text: s.title; fontSize: 13; maxLines: 2 }
+          Row {
+            gap: 8
+            Text { text: "${s.points} pts"; fontSize: 10; color: muted; maxLines: 1 }
+            Text { text: "${s.comments} comments"; fontSize: 10; color: muted; maxLines: 1; onTap: url("https://news.ycombinator.com/item?id=${s.id}") }
+            Text { text: s.site; fontSize: 10; color: muted; maxLines: 1; weight: 1; align: end }
+          }
+        }
+      }
+    }
+    if canMore {
+      Text {
+        text: loading ? "loading…" : len(stories) == 0 ? "fetching…" : "load 20 more"
+        fontSize: 11
+        color: loading ? muted : accent
+        align: center
+        padding: [0, 2]
+        onTap: {
+          if !loading {
+            want = want + 20
+            loadingUntil = now + 15
+          }
+        }
+      }
+    }
+  }
+}

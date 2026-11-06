@@ -7,6 +7,7 @@ theme = "vitamin"
 font = "Maple Mono NF"
 
 [home]
+recent-apps = false
 columns = 8
 single-page = true
 

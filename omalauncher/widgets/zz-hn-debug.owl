@@ -1,0 +1,31 @@
+widget "hn debug" {
+  meta { owl: 18 }
+  size: 6x4
+  state page = 1
+  state more = []
+  state logs = 0
+  source now = clock every 1s
+  let since = floor(now / 86400) * 86400 - 7 * 86400
+  source front = http("https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=30") every 15m json timeout 15s
+  source extra = http("https://hn.algolia.com/api/v1/search?tags=story&numericFilters=created_at_i%3E${int(since)}&hitsPerPage=20&page=${int(page)}") json timeout 15s
+  on extra first {
+    let got = (value.hits ?? [])
+    more = more + got.map(h => h.objectID)
+    if logs < 20 { logs = logs + 1; run("echo first page=${sh(page)} got=${sh(len(got))} >> /tmp/hn.log") }
+    if page < 4 { page = page + 1 }
+  }
+  on extra {
+    let got = (value.hits ?? [])
+    more = more + got.map(h => h.objectID)
+    if logs < 20 { logs = logs + 1; run("echo change page=${sh(page)} got=${sh(len(got))} >> /tmp/hn.log") }
+    if page < 4 { page = page + 1 }
+  }
+  on front first {
+    if logs < 20 { logs = logs + 1; run("echo front-first hits=${sh(len(front.hits ?? []))} >> /tmp/hn.log") }
+  }
+  Column {
+    Text { text: "page=${page} more=${len(more)} logs=${logs}" }
+    Text { text: "extra=${extra == null ? "null" : len(extra.hits ?? [])} front=${front == null ? "null" : len(front.hits ?? [])}" }
+  }
+}
+// touch

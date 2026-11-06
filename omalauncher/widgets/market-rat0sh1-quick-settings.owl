@@ -1,8 +1,9 @@
 widget "quick settings" {
   // Quick settings in Omarchy's style: Wi-Fi, mobile data, media, flashlight, Do Not Disturb and Bluetooth in one row
   // on square tiles, set in JetBrains Mono. Wi-Fi, data and Do Not Disturb come from Android itself, so no adb.
+  // A tile taller than it is wide (home turned on its side in landscape) stacks them instead, each stretching across.
 
-  meta { owl: 13; description: "Compact Omarchy-style quick settings in one row: Wi-Fi, mobile data, media, flashlight, Do Not Disturb and Bluetooth. Reads the phone's radios directly, no adb"; version: "2.1"; license: "MIT"; category: "system" }
+  meta { owl: 13; description: "Compact Omarchy-style quick settings in one row: Wi-Fi, mobile data, media, flashlight, Do Not Disturb and Bluetooth. Reads the phone's radios directly, no adb"; version: "2.2"; license: "MIT"; category: "system" }
 
   size: 8x2
   minSize: 6x2
@@ -23,46 +24,106 @@ widget "quick settings" {
   let dataNote = !sim.data ? "off" : lower(words(sim.carrier ?? "on")[0])
   // Where the sound goes, when it's headphones, keeps the Bluetooth tile's note short too.
   let btNote = !m.bluetooth ? "off" : (v.output != null && v.output.type == "bluetooth" ? lower(words(v.output.name ?? "on")[0]) : "on")
+  // Home's grid turns on its side in landscape, so this 8x2 tile is shown 2 wide and 8 tall: stack the tiles then.
+  let stacked = tileWidth != null && tileHeight != null && tileHeight > tileWidth
+  // The four tiles that are always there; the torch joins them only on a phone with a flash.
+  let tiles = [
+    { kind: "wifi", g: m.wifi ? "󰖩" : "󰖪", label: "wi-fi", note: m.wifi ? "on" : "off", on: m.wifi ?? false },
+    { kind: "data", g: sim.data ? "󰒢" : "󰞃", label: "data", note: dataNote, on: sim.data ?? false },
+    { kind: "media", g: v.muted ? "󰖁" : "󰕾", label: "media", note: v.muted ? "muted" : "${v.level}%", on: !v.muted },
+    { kind: "bt", g: m.bluetooth ? "󰂯" : "󰂲", label: "bt", note: btNote, on: m.bluetooth ?? false },
+  ]
 
   component Ic(g, sz = 22, tint = foreground) {
     Text { text: g; font: nf; fontSize: sz; color: tint; maxLines: 1; align: center }
   }
 
-  // A quick-settings tile: outlined, filled with the accent while on.
+  // A quick-settings tile: outlined, filled with the accent while on; in a stacked tile the icon sits beside
+  // the label so the short, wide chips keep all their text.
   component Tile(g, label, note, on = false) {
-    Column {
-      gap: 1
-      align: center
-      justify: center
+    Box {
       fill: true
-      padding: [6, 2]
+      padding: stacked ? [2, 2] : [6, 2]
       background: on ? primary : containerHigh
       border: 1
       borderColor: on ? primary : outline
       radius: 6 * corners
       animate background: tween(200ms, "ease")
-      Ic { g: g; sz: 18; tint: on ? onPrimary : foreground }
-      Text { text: label; font: jb; fontSize: 10; fontWeight: 600; color: on ? onPrimary : foreground; maxLines: 1; align: center }
-      Text { text: note ?? "…"; font: jb; fontSize: 8; color: on ? alpha(onPrimary, 0.75) : dim; maxLines: 1; align: center }
+      if stacked {
+        // Stacked chips are wide and short: the icon sits beside the label, with the note under it.
+        Row {
+          gap: 2
+          align: center
+          fill: true
+          Ic { g: g; sz: 13; tint: on ? onPrimary : foreground }
+          Column {
+            gap: 0
+            weight: 1
+            Text { text: label; font: jb; fontSize: 10; fontWeight: 600; color: on ? onPrimary : foreground; maxLines: 1 }
+            Text { text: note ?? "…"; font: jb; fontSize: 8; color: on ? alpha(onPrimary, 0.75) : dim; maxLines: 1 }
+          }
+        }
+      } else {
+        Column {
+          gap: 1
+          align: center
+          justify: center
+          fill: true
+          Ic { g: g; sz: 18; tint: on ? onPrimary : foreground }
+          Text { text: label; font: jb; fontSize: 10; fontWeight: 600; color: on ? onPrimary : foreground; maxLines: 1; align: center }
+          Text { text: note ?? "…"; font: jb; fontSize: 8; color: on ? alpha(onPrimary, 0.75) : dim; maxLines: 1; align: center }
+        }
+      }
+    }
+  }
+
+  // One tile and what a tap on it does. Android lets a launcher read the radios but not switch them, so those taps
+  // open Android's own panel; media, the torch and Do Not Disturb it can switch.
+  component Qs(kind, g, label, note, on = false) {
+    Box {
+      fill: true
+      onTap: {
+        if kind == "media" {
+          volume("toggle")
+        } else {
+          haptic()
+          if kind == "wifi" {
+            settings("wifi")
+          } else if kind == "data" {
+            settings("data")
+          } else if kind == "bt" {
+            settings("bluetooth")
+          } else if kind == "torch" {
+            torch("toggle")
+          } else {
+            dnd("toggle")
+          }
+        }
+      }
+      Tile { g: g; label: label; note: note; on: on }
     }
   }
 
   Column {
     gap: 6
     fill: true
-    Row {
-      gap: 4
-      fill: true
-      // Android lets a launcher read the radios but not switch them, so a tap opens Android's own panel.
-      Box { weight: 1; fill: height; onTap: { haptic(); settings("wifi") }; Tile { g: m.wifi ? "󰖩" : "󰖪"; label: "wi-fi"; note: m.wifi ? "on" : "off"; on: m.wifi ?? false } }
-      Box { weight: 1; fill: height; onTap: { haptic(); settings("data") }; Tile { g: sim.data ? "󰒢" : "󰞃"; label: "data"; note: dataNote; on: sim.data ?? false } }
-      Box { weight: 1; fill: height; onTap: volume("toggle"); Tile { g: v.muted ? "󰖁" : "󰕾"; label: "media"; note: v.muted ? "muted" : "${v.level}%"; on: !v.muted } }
-      // Like the radios above, Android shows Bluetooth's state but won't switch it here.
-      Box { weight: 1; fill: height; onTap: { haptic(); settings("bluetooth") }; Tile { g: m.bluetooth ? "󰂯" : "󰂲"; label: "bt"; note: btNote; on: m.bluetooth ?? false } }
-      if m.torch != null {
-        Box { weight: 1; fill: height; onTap: { haptic(); torch("toggle") }; Tile { g: m.torch ? "󰉄" : "󰉅"; label: "torch"; note: m.torch ? "on" : "off"; on: m.torch } }
+    if stacked {
+      // Landscape: one tile per row, each as wide as the widget, stacked to fill its height.
+      Column {
+        gap: 4
+        fill: true
+        for t in tiles { Qs { kind: t.kind; g: t.g; label: t.label; note: t.note; on: t.on; weight: 1 } }
+        if m.torch != null { Qs { kind: "torch"; g: m.torch ? "󰉄" : "󰉅"; label: "torch"; note: m.torch ? "on" : "off"; on: m.torch; weight: 1 } }
+        Qs { kind: "dnd"; g: m.dnd ? "󰍶" : "󰍷"; label: "dnd"; note: m.dnd ? (m.dndAllows ?? "on") : (m.ringer ?? "off"); on: m.dnd; weight: 1 }
       }
-      Box { weight: 1; fill: height; onTap: { haptic(); dnd("toggle") }; Tile { g: m.dnd ? "󰍶" : "󰍷"; label: "dnd"; note: m.dnd ? (m.dndAllows ?? "on") : (m.ringer ?? "off"); on: m.dnd } }
+    } else {
+      Row {
+        gap: 4
+        fill: true
+        for t in tiles { Qs { kind: t.kind; g: t.g; label: t.label; note: t.note; on: t.on; weight: 1 } }
+        if m.torch != null { Qs { kind: "torch"; g: m.torch ? "󰉄" : "󰉅"; label: "torch"; note: m.torch ? "on" : "off"; on: m.torch; weight: 1 } }
+        Qs { kind: "dnd"; g: m.dnd ? "󰍶" : "󰍷"; label: "dnd"; note: m.dnd ? (m.dndAllows ?? "on") : (m.ringer ?? "off"); on: m.dnd; weight: 1 }
+      }
     }
   }
 }

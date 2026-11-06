@@ -1,0 +1,40 @@
+widget "sshd" {
+  size: 8x1
+  minSize: 2x1
+  meta { owl: 12; description: "SSH into this phone: whether the server runs, the address to reach it on the NetBird tunnel or Wi-Fi, and a tap to start it"; version: "1.0"; license: "MIT"; category: "system" }
+
+  requires { pacman: ["openssh", "iproute2"] }
+
+  // sshd itself, and the addresses this phone answers on.
+  source pid = cmd("pgrep -x sshd || true") every 30s
+  source addrs = cmd("ip -br -4 addr show") every 30s
+  // A clock that changes every half minute, so a server that went away is started again.
+  source tick = clock every 30s
+
+  let up = pid != null && join(words(pid), "") != ""
+  let ips = addrs == null ? [] : lines(addrs).map(l => words(l)).filter(w => len(w) > 2).map(w => split(w[2], "/")[0])
+  // NetBird's tunnel is the 100.64.0.0/10 address (tun1, wt0); the phone's Wi-Fi is the other one.
+  let nb = ips.find(a => split(a, ".")[0] == "100")
+  let lan = ips.find(a => startsWith(a, "192.168.") || startsWith(a, "10.") || startsWith(a, "172."))
+  let where = nb ?? lan ?? ""
+
+  // Starts it at boot, and again if it ever goes: the widget's shell outlives the tile, and the server with it.
+  on tick first { if !up { run("/usr/local/bin/omarchy-sshd") } }
+  on tick { if !up { run("/usr/local/bin/omarchy-sshd") } }
+
+  onTap: if !up { run("/usr/local/bin/omarchy-sshd") }
+
+  let dim = mix(muted, foreground, 0.5)
+  let h = tileHeight ?? 999
+
+  Row {
+    align: center
+    gap: 8
+    fill: true
+    Spacer { size: 8; radius: 4; background: up ? green : alpha(muted, 0.5) }
+    Text { text: "sshd"; style: body; bold: true; maxLines: 1 }
+    Text { text: up ? "on" : "off"; style: small; bold: true; color: up ? green : dim; maxLines: 1 }
+    Spacer { weight: 1 }
+    Text { text: up ? (where == "" ? ":22" : where) : "tap to start"; style: small; font: mono; color: dim; maxLines: 1 }
+  }
+}

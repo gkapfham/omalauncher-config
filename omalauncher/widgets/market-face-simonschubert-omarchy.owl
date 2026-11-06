@@ -4,9 +4,9 @@ face "omarchy" {
   // Workspace 1 is the desktop. 2 apps, 3 agents.
 
   meta {
-    owl: 13
+    owl: 18
     description: "An Omarchy session: a bar, tiled windows, fastfetch, agents, and your apps"
-    version: "1.0"
+    version: "1.1"
     license: "MIT"
     category: "system"
   }
@@ -22,6 +22,7 @@ face "omarchy" {
   source bat = android.battery
   source modes = android.modes
   source m = android.media
+  source al = android.alarm
   source apps = android.apps
   source rec = android.recent
   source ag = android.agents
@@ -34,6 +35,8 @@ face "omarchy" {
 
   state ws = 1
   state focused = "fetch"
+  // The clock's menu: what the bar's clock opens on a tap or a long press.
+  state clockMenu = false
 
   let host = lower(replace(trim(dev.model ?? "phone"), " ", "-"))
   let user = linux ? "root" : "user"
@@ -52,6 +55,8 @@ face "omarchy" {
   let ink = alpha(muted, 0.55)
   let glass = alpha(background, tileOpacity)
   let gap = 5
+  // The phone's clock app, for the menu: the one that set the next alarm, else the first one named so.
+  let clockApp = (apps ?? []).find(a => contains(lower(a.name), "clock"))
 
   component Ws(n) {
     Column {
@@ -240,7 +245,71 @@ face "omarchy" {
         Ws { n: 3 }
       }
       Spacer { weight: 1 }
-      Text { text: fmtTime(now, "EEE d  HH:mm"); font: mono; fontSize: 13; maxLines: 1 }
+      // The clock: a tap or a long press opens its menu, as the bar's clock does in Omarchy. A long press is the
+      // face's own, so a node has to take it: without this one, it would open home's menu instead.
+      Box {
+        align: center
+        padding: [10, 2]
+        Text {
+          text: fmtTime(now, "EEE d  HH:mm")
+          font: mono
+          fontSize: 13
+          maxLines: 1
+          onTap: { haptic(); clockMenu = !clockMenu }
+          onLongPress: { haptic(); clockMenu = !clockMenu }
+        }
+        Popup {
+          visible: clockMenu
+          onDismiss: clockMenu = false
+          width: 260
+          gap: 10
+          padding: [14, 12]
+          background: glass
+          frost: tileFrost
+          border: 2
+          borderColor: accent
+          Text { text: fmtTime(now, "HH:mm"); font: mono; fontSize: 32; color: accent; maxLines: 1 }
+          Text { text: fmtTime(now, "EEEE d MMMM"); font: mono; fontSize: 12; color: muted; maxLines: 1 }
+          Box { height: 1; fill: width; background: ink }
+          Row {
+            gap: 12
+            align: center
+            Text { text: "alarm"; font: mono; fontSize: 12; color: accent; width: 64; maxLines: 1 }
+            Text { text: al.set ? fmtTime(al.time, "EEE HH:mm") : "none"; font: mono; fontSize: 12; weight: 1; maxLines: 1 }
+            if al.set { Text { text: "in " + fmtDuration(al.time - now); font: mono; fontSize: 11; color: muted; maxLines: 1 } }
+          }
+          Row {
+            gap: 12
+            align: center
+            onTap: {
+              clockMenu = false
+              if al.set && al.app != null {
+                androidApp(al.app)
+              } else if clockApp != null {
+                androidApp(clockApp.key)
+              }
+            }
+            Text { text: "clock"; font: mono; fontSize: 12; color: accent; width: 64; maxLines: 1 }
+            Text {
+              text: clockApp == null && !(al.set && al.app != null) ? "no clock app" : "open"
+              font: mono
+              fontSize: 12
+              color: clockApp == null && !(al.set && al.app != null) ? muted : foreground
+              weight: 1
+              maxLines: 1
+            }
+            Text { text: "›"; font: mono; fontSize: 12; color: muted }
+          }
+          Row {
+            gap: 12
+            align: center
+            onTap: { clockMenu = false; calendar("open") }
+            Text { text: "calendar"; font: mono; fontSize: 12; color: accent; width: 64; maxLines: 1 }
+            Text { text: "today"; font: mono; fontSize: 12; weight: 1; maxLines: 1 }
+            Text { text: "›"; font: mono; fontSize: 12; color: muted }
+          }
+        }
+      }
       Spacer { weight: 1 }
       Row {
         width: 132

@@ -1,0 +1,52 @@
+widget "recent" {
+  meta { owl: 17; description: "The apps you opened last, as many icons as the tile has room for, each as big as a grid cell: tap one to open it."; version: "0.2"; license: "MIT"; category: "system" }
+
+  // First time on home: page 1, above everything else. Move or resize it on the phone; layout.toml keeps that.
+  page: 1
+  order: 0
+  size: 8x1
+  minSize: 1x1
+  // A tile's own margin, so the icons keep off its edge.
+  padding: [4, 2]
+
+  // The phone's own list, last opened first: Android and Linux apps, owl apps and shortcuts alike. No shell involved.
+  source r = android.recent
+
+  // The tile is a grid of icons that grows with it: one row of them on a one-row tile, two on two, eight across a
+  // tile eight cells wide, and so on. An icon is a little smaller than the cell it sits in, so the row keeps air
+  // between icons and off the tile's edge; the leftovers of the tile's width and height become wider gaps.
+  // How much of its cell an icon takes: 0.8 keeps a little air around each; lower leaves more, higher fills the tile.
+  let fill = 0.8
+  let gap = 6
+  let padX = 4
+  let padY = 2
+  let cellsW = max(1, cols ?? 8)
+  let cellsH = max(1, rows ?? 1)
+  let room = min(((tileWidth ?? 400) - 2 * padX) / cellsW, ((tileHeight ?? 44) - 2 * padY) / cellsH)
+  let icon = clamp(round(room * fill), 20, 44)
+  // How many fit, each with a gap after it: width and height leave a gap's worth of slack for the last one.
+  let across = clamp(floor(((tileWidth ?? 400) - 2 * padX + gap) / (icon + gap)), 1, cellsW)
+  let down = clamp(floor(((tileHeight ?? 44) - 2 * padY + gap) / (icon + gap)), 1, cellsH)
+  let apps = take(r ?? [], across * down)
+
+  Column {
+    fill: true
+    justify: center
+    Grid {
+      columns: across
+      gap: gap
+      fill: width
+      for a in apps key a.key {
+        Box {
+          fill: width
+          align: center
+          onTap: { haptic(); open(a.key) }
+          Image { src: a.icon; size: icon; fit: contain; label: a.name }
+        }
+      }
+    }
+    if len(apps) == 0 {
+      Text { text: "recent apps"; style: muted; align: center; weight: 1 }
+    }
+  }
+}

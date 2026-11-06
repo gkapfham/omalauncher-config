@@ -77,6 +77,8 @@ panel "app drawer" {
   }
   source d = android.drawer
   source ag = android.agents
+  // What home's recent strip above the bar shows, the apps opened last first; the drawer shows it at the top too.
+  source rec = android.recent
   // The app whose long-press menu is open, by key, and the shortcuts it offers: null while they load, and the menu
   // waits for them, so it opens whole rather than growing.
   state menu = ""
@@ -119,6 +121,9 @@ panel "app drawer" {
   let foldered = flatten(keys(folders).map(f => get(folders, f, [])))
   let mine = mineAll.filter(a => !get(hidden, a.key, false) && !any(foldered, k => k == a.key))
   let hiddenApps = mineAll.filter(a => get(hidden, a.key, false))
+  // The apps opened last, as a strip above the list, like home's above the bar: icons only, as home's are, since a
+  // cell here is too narrow for a name. One hidden from the drawer stays out of it too.
+  let recent = take(rec ?? [], 8).filter(a => !get(hidden, a.key, false))
   // Each folder a section of its apps, ahead of the others; one whose apps are all hidden or gone waits.
   let folderSections = keys(folders).map(f => {id: "folder:" + f, title: f, folder: f, apps: get(folders, f, []).map(k => find(mineAll, a => a.key == k)).filter(a => a != null && !get(hidden, a.key, false))}).filter(s => len(s.apps) > 0)
   // Each section's id keys its rows; its title is the one shown.
@@ -363,6 +368,22 @@ panel "app drawer" {
       weight: 1
       fill: width
       gap: 0
+      // The apps opened last, above the list, as on home: a tap opens one and leaves the drawer.
+      Row {
+        visible: len(recent) > 0
+        fill: width
+        gap: 6
+        padding: [2, 4, 2, 8]
+        align: center
+        for a in recent key a.key {
+          Box {
+            weight: 1
+            align: center
+            onTap: { haptic(); open(a.key) }
+            Image { src: a.icon; size: 34; fit: contain; label: a.name }
+          }
+        }
+      }
       for row in rows key row.key {
         if row.title != null {
           // A section's title, with the work switch or the offer to install Linux at its end.
