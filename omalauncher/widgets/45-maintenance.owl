@@ -46,7 +46,8 @@ widget "maintenance" {
   let backupNote = st == null ? "never" : (st.state == "error" ? (st.message ?? "failed") : fmtAgo(st.at ?? now, now))
 
   // Saving the whole setup and uploading it is what this tile is about, so a tap on the tile does that.
-  onTap: run("$HOME/omalauncher-config/drive-backup.sh")
+  // owl-config, not drive-backup.sh: it also keeps status.json and the list of backups up to date.
+  onTap: run("$HOME/.local/bin/owl-config save")
 
   Column {
     gap: 2
@@ -101,7 +102,7 @@ widget "maintenance" {
       align: center
       gap: 8
       fill: width
-      onTap: run("$HOME/omalauncher-config/drive-backup.sh")
+      onTap: run("$HOME/.local/bin/owl-config save")
       Text { text: "backup"; style: small; font: mono; color: muted; width: 66; maxLines: 1 }
       Text {
         text: backupState == null ? "…" : backupState == "ok" ? "✓" : backupState == "error" ? "✕" : "…"
