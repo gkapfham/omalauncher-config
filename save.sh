@@ -48,10 +48,11 @@ done
 if [ -d "$pi"/themes ]; then cp -Rp "$pi"/themes/. pi/agent/themes/; fi
 if [ -f "$HOME"/AGENTS.md ]; then cp -p "$HOME"/AGENTS.md .; fi
 
-# owl-agenda, the calendar CLI, and the pi skill it asks Google through. Not the skill's node_modules (220 MB);
-# restore.sh installs those again with npm.
+# owl-agenda, the calendar CLI, owl-mail, the Gmail CLI, and the pi skill they ask Google through. Not the
+# skill's node_modules (220 MB); restore.sh installs those again with npm.
 mkdir -p bin pi/agent/skills
 if [ -f "$HOME"/.local/bin/owl-agenda ]; then cp -p "$HOME"/.local/bin/owl-agenda bin/; fi
+if [ -f "$HOME"/.local/bin/owl-mail ]; then cp -p "$HOME"/.local/bin/owl-mail bin/; fi
 if [ -f "$HOME"/.local/bin/owl-config ]; then cp -p "$HOME"/.local/bin/owl-config bin/; fi
 if [ -d "$pi"/skills ]; then tar -C "$pi"/skills --exclude=node_modules -cf - . | tar -C pi/agent/skills -xf -; fi
 
@@ -63,7 +64,13 @@ fi
 git commit -q -m "${1:-save $(date '+%Y-%m-%d %H:%M')}"
 echo "Saved $(git ls-files | wc -l | tr -d ' ') files."
 if git remote | grep -q .; then
-  git push -q && echo "Pushed to GitHub."
+  # No credentials on the phone means no push; the save itself is done, and drive-backup.sh must still upload.
+  if GIT_TERMINAL_PROMPT=0 git push -q 2>/dev/null; then
+    echo "Pushed to GitHub."
+  else
+    echo "Saved locally. GitHub push skipped: no credentials here."
+    echo "  Add one with: git config credential.helper store, then echo https://<token>@github.com > ~/.git-credentials"
+  fi
 else
   echo "No GitHub repository set up yet: see README.md, then run save.sh again."
 fi

@@ -40,6 +40,7 @@ It also carries the tools that make that true: `save.sh`, `restore.sh`, `drive.j
 | `pi/agent/skills/google-workspace/` | `~/.pi/agent/skills/` — the OAuth + Google APIs skill the agenda uses |
 | `AGENTS.md` | `~/AGENTS.md` — what pi reads about this phone |
 | `bin/owl-agenda` | `~/.local/bin/` — the calendar CLI behind `30-agenda.owl` |
+| `bin/owl-mail` | `~/.local/bin/` — the Gmail CLI behind `20-mail.owl` |
 | `bin/owl-config` | `~/.local/bin/` — the backup/restore CLI behind the tiles and the app |
 | `drive.js`, `drive-backup.sh` | the Google Drive side of the backup |
 | `save.sh`, `restore.sh` | snapshot to git, and apply a snapshot |
@@ -234,6 +235,28 @@ days=14
 
 ---
 
+## Gmail — `owl-mail`
+
+`20-mail.owl` reads Gmail through `owl-mail`, which uses the same skill and token as `owl-agenda`. A message is put
+under **needs a reply** when a person wrote to you (not a list, a no-reply address or a machine notice) and the subject
+or snippet asks something; the rest of the inbox follows.
+
+```sh
+owl-mail                                    # the inbox, in the terminal
+owl-mail json --limit 30                    # what the widget reads
+owl-mail accounts                           # signed-in accounts
+owl-mail login --email you@example.com      # one-time sign-in, in the browser
+```
+
+Optional defaults (account and how many messages to fetch) can go in `~/.config/owl-mail/config`:
+
+```
+email=you@example.com
+limit=30
+```
+
+---
+
 ## Dependencies
 
 Every widget declares what its commands need in `requires { pacman: [ … ] }`. The set for this setup:
@@ -242,7 +265,7 @@ Every widget declares what its commands need in `requires { pacman: [ … ] }`. 
 | --- | --- |
 | `btop` | quick settings' btop tile; the face's terminal use |
 | `python` | `owl-config` (backup/restore safety) |
-| `nodejs` | `owl-agenda`, `drive.js`, the Google Workspace skill |
+| `nodejs` | `owl-agenda`, `owl-mail`, `drive.js`, the Google Workspace skill |
 | `git` | `save.sh` commits, `owl-config` |
 | `util-linux` | `setsid`, `flock` |
 | `zstd` | the compressed font bundle |

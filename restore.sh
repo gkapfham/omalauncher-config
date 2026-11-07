@@ -53,6 +53,11 @@ if [ -f bin/owl-agenda ]; then
   cp -p bin/owl-agenda "$HOME"/.local/bin/
   chmod +x "$HOME"/.local/bin/owl-agenda
 fi
+if [ -f bin/owl-mail ]; then
+  mkdir -p "$HOME"/.local/bin
+  cp -p bin/owl-mail "$HOME"/.local/bin/
+  chmod +x "$HOME"/.local/bin/owl-mail
+fi
 if [ -f bin/owl-config ]; then
   mkdir -p "$HOME"/.local/bin
   cp -p bin/owl-config "$HOME"/.local/bin/

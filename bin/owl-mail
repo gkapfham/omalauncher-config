@@ -1,0 +1,406 @@
+#!/usr/bin/env python3
+"""owl-mail — your Gmail, for omalauncher widgets and for the terminal.
+
+The data comes from the pi google-workspace skill's OAuth scripts (`~/.pi/agent/skills/google-workspace`): this
+doesn't need pi running, just that skill installed and one account signed in.
+
+    owl-mail                    the inbox, for a terminal
+    owl-mail json [--limit N]   JSON, which 20-mail.owl reads
+    owl-mail accounts           who is signed in
+    owl-mail login [--email]    sign one in (opens the browser)
+    owl-mail whoami
+
+Where it looks, in order: --email, $OWL_MAIL_ACCOUNT, `email=` in ~/.config/owl-mail/config, the one account
+signed in. `limit=` in that config sets how many messages a fetch asks for, so a widget needs no arguments.
+"""
+
+import html
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.parse
+from datetime import datetime
+from pathlib import Path
+
+SKILL = Path(os.environ.get("GOOGLE_WORKSPACE_SKILL_DIR", Path.home() / ".pi/agent/skills/google-workspace"))
+TOKENS = Path(os.environ.get("GOOGLE_WORKSPACE_TOKENS_DIR", Path.home() / ".pi/google-workspace/tokens"))
+CONFIG = Path(os.environ.get("OWL_MAIL_CONFIG", Path.home() / ".config/owl-mail/config"))
+NODE = os.environ.get("OWL_MAIL_NODE") or "node"
+
+# What the widget reads, and what `owl-mail json` prints: the newest messages in the inbox, each with what a
+# tile needs to draw a row — who, what, when, whether it is unread, and what it is the start of.
+SCRIPT = """
+const limit = Number(%LIMIT%);
+const me = String(%ME%).toLowerCase();
+const gmail = google.gmail({ version: 'v1', auth });
+
+// The inbox in one call: how much is in it, and how much of that is unread.
+const label = await gmail.users.labels.get({
+  userId: 'me',
+  id: 'INBOX',
+  fields: 'messagesTotal,messagesUnread',
+});
+
+// Anything that arrived since this device's midnight: the ids themselves, because the count Gmail calls an
+// estimate comes back wrong for one page.
+let today = null;
+try {
+  const since = await gmail.users.messages.list({
+    userId: 'me',
+    q: `in:inbox after:${Math.floor(%TODAY% / 1000)}`,
+    maxResults: 500,
+    fields: 'messages/id,nextPageToken',
+  });
+  today = (since.data.messages || []).length + (since.data.nextPageToken ? 500 : 0);
+} catch (e) {
+  today = null;
+}
+
+const list = await gmail.users.messages.list({
+  userId: 'me',
+  q: 'in:inbox',
+  maxResults: limit,
+  fields: 'messages/id',
+});
+const ids = (list.data.messages || []).map((m) => m.id);
+
+// Each message's headers and snippet: enough to know who it is from, what it is about and whether it is a
+// person writing to you or a machine sending a notice.
+const msgs = await Promise.all(
+  ids.map(async (id) => {
+    const got = await gmail.users.messages.get({
+      userId: 'me',
+      id,
+      format: 'metadata',
+      metadataHeaders: [
+        'From',
+        'To',
+        'Cc',
+        'Subject',
+        'Date',
+        'List-Id',
+        'List-Unsubscribe',
+        'Auto-Submitted',
+        'Precedence',
+      ],
+      fields: 'id,threadId,labelIds,snippet,internalDate,payload/headers',
+    });
+    const d = got.data || {};
+    const headers = {};
+    for (const h of ((d.payload || {}).headers) || []) {
+      headers[String(h.name || '').toLowerCase()] = h.value || '';
+    }
+    return {
+      id: d.id,
+      thread: d.threadId,
+      from: headers.from || '',
+      to: headers.to || '',
+      cc: headers.cc || '',
+      subj: headers.subject || '',
+      date: Number(d.internalDate) || 0,
+      unread: (d.labelIds || []).includes('UNREAD'),
+      labels: d.labelIds || [],
+      snippet: d.snippet || '',
+      list: Boolean(headers['list-id'] || headers['list-unsubscribe']),
+      auto: Boolean(headers['auto-submitted'] && headers['auto-submitted'].toLowerCase() !== 'no'),
+      precedence: (headers.precedence || '').toLowerCase(),
+    };
+  }),
+);
+return {
+  at: Math.round(Date.now() / 1000),
+  account: workspace.accountEmail || null,
+  total: label.data.messagesTotal ?? null,
+  unread: label.data.messagesUnread ?? null,
+  today,
+  msgs,
+};
+"""
+
+# A machine wrote it: nobody is waiting on a person there.
+AUTOMATED = re.compile(
+    r"""(no-?reply|do-?not-?reply|donotreply|mailer-daemon|postmaster|bounce|automated|notifications?@
+        |alerts?@|updates?@|news@|newsletter|digest|support@|info@|hello@|team@|billing@|receipts?@
+        |calendar-notification|drive-shares|comments-noreply)""",
+    re.I | re.X,
+)
+# It reads like it expects an answer: a question, or a request.
+ASK = re.compile(
+    r"""(\?\s*$)                                                     # ends on a question mark
+      |(\b(can you|could you|would you|will you|are you|do you|did you|have you
+            |any chance|let me know|get back to me|thoughts\??|your (thoughts|input|take)
+            |please (send|review|confirm|reply|advise|take a look|sign|approve|fill|update)
+            |when can|what time|shall we|can we|need your|waiting on you|rsvp
+            |confirm|approve|sign off|review|deadline|available|free (on|at|for)
+            |inquir(y|ies)|question about|wondering|looking for|interested in
+            |wanted to (ask|check|see)|invitation to|invite you|call for\b)\b)""",
+    re.I | re.X,
+)
+
+
+def die(message, code=1):
+    print(message, file=sys.stderr)
+    sys.exit(code)
+
+
+def config() -> dict:
+    values = {}
+    try:
+        for line in CONFIG.read_text().splitlines():
+            line = line.split("#", 1)[0].strip()
+            if "=" in line:
+                key, value = line.split("=", 1)
+                values[key.strip()] = value.strip()
+    except OSError:
+        pass
+    return values
+
+
+def accounts() -> list:
+    """The addresses signed in, from the token files the skill keeps, `you%40example.com.json`."""
+    if not TOKENS.is_dir():
+        return []
+    return sorted(urllib.parse.unquote(p.name)[: -len(".json")] for p in TOKENS.glob("*.json"))
+
+
+def account(wanted=None) -> str:
+    wanted = wanted or os.environ.get("OWL_MAIL_ACCOUNT") or config().get("email")
+    if wanted:
+        return wanted
+    known = accounts()
+    if len(known) == 1:
+        return known[0]
+    if not known:
+        die("no Google account is signed in yet — run:\n  owl-mail login --email you@example.com", 2)
+    die("more than one account is signed in; say which:\n  " + "\n  ".join(known) + "\n\nor set email= in " + str(CONFIG), 2)
+
+
+def node_available() -> bool:
+    try:
+        subprocess.run([NODE, "--version"], capture_output=True, check=True)
+        return True
+    except (OSError, subprocess.CalledProcessError):
+        return False
+
+
+def fetch(email: str, limit: int) -> dict:
+    """Runs the skill's API runner with the Gmail script above, and returns what it printed."""
+    fixture = os.environ.get("OWL_MAIL_FIXTURE")
+    if fixture:
+        return json.loads(Path(fixture).read_text())
+    if not (SKILL / "scripts/workspace.js").is_file():
+        die(f"the google-workspace skill isn't at {SKILL} — set GOOGLE_WORKSPACE_SKILL_DIR", 2)
+    if not node_available():
+        die("node isn't on PATH — `mise use -g node@22` installs it", 2)
+    now = datetime.now().astimezone()
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000
+    script = SCRIPT.replace("%LIMIT%", str(limit)).replace("%ME%", json.dumps(email)).replace("%TODAY%", str(int(midnight)))
+    proc = subprocess.run(
+        [NODE, str(SKILL / "scripts/workspace.js"), "exec", "--email", email, "--timeout", "45000"],
+        input=script,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    out = proc.stdout.strip()
+    if not out:
+        detail = (proc.stderr or "").strip().splitlines()
+        die(next((line for line in reversed(detail) if line.strip()), "it printed nothing"), 1)
+    # The runner prints one JSON value, after any logs it collected: {ok, result} or {ok: false, error}.
+    try:
+        payload = json.loads(out[out.index("{"):])
+    except ValueError:
+        die("the runner printed something that isn't JSON:\n" + out[:400], 1)
+    if not payload.get("ok"):
+        error = payload.get("error") or {}
+        message = (error.get("message") if isinstance(error, dict) else str(error)) or "the runner failed without saying why"
+        if "unauthorized" in message.lower() or "401" in message or "insufficient" in message.lower():
+            message += f"\n  owl-mail login --email {email}"
+        die(message, 1)
+    return payload.get("result") or {}
+
+
+def sender(raw: str) -> str:
+    """`"Doe, Jane" <jane@example.com>` as `Jane Doe`; an address alone stays as it is."""
+    raw = (raw or "").strip()
+    match = re.match(r'^\s*"?(.*?)"?\s*<([^>]+)>\s*$', raw)
+    if not match:
+        return raw.split("<")[0].strip() or raw
+    name, address = match.group(1).strip(), match.group(2).strip()
+    if not name:
+        return address
+    if "," in name:  # Gmail's `Doe, Jane` is the same person as `Jane Doe`.
+        last, first = [part.strip() for part in name.split(",", 1)]
+        name = f"{first} {last}".strip()
+    return name
+
+
+def relative(ts: int, now: int) -> str:
+    if not ts:
+        return ""
+    delta = now - ts
+    if delta < 60:
+        return "now"
+    if delta < 3600:
+        return f"{delta // 60}m"
+    if delta < 86400:
+        return f"{delta // 3600}h"
+    when = datetime.fromtimestamp(ts).astimezone()
+    if delta < 7 * 86400:
+        return when.strftime("%a")
+    return when.strftime("%-d %b")
+
+
+def addressed(to: str, cc: str, me: str) -> bool:
+    """Was it sent to you, rather than a list you happen to be on?"""
+    if not me:
+        return False
+    haystack = f"{to} {cc}".lower()
+    return me.lower() in haystack or not haystack.strip()
+
+
+def shape(data: dict) -> dict:
+    """Adds the strings a widget would otherwise work out: who sent it, when, and whether it wants an answer."""
+    now = int(time.time())
+    account_email = data.get("account") or ""
+    msgs = []
+    for m in data.get("msgs") or []:
+        raw_from = m.get("from") or ""
+        subject = html.unescape(m.get("subj") or "").strip() or "(no subject)"
+        snip = html.unescape(re.sub(r"\s+", " ", m.get("snippet") or "")).strip()
+        snip = re.sub(r"[\u034f\u200b\u200c\u200d\ufeff]", "", snip)
+        labels = m.get("labels") or []
+        bulk = bool(m.get("list")) or bool(m.get("auto")) or m.get("precedence") in ("bulk", "list", "junk")
+        automated = bool(AUTOMATED.search(raw_from))
+        personal = not bulk and not automated
+        asks = bool(ASK.search(f"{subject} {snip}"))
+        wants = personal and addressed(m.get("to") or "", m.get("cc") or "", account_email) and asks
+        promoted = "CATEGORY_PROMOTIONS" in labels or "CATEGORY_SOCIAL" in labels
+        why = "asks" if asks else ("unread" if m.get("unread") else "to you")
+        msgs.append(
+            {
+                "id": m.get("id"),
+                "from": sender(raw_from) or "(unknown)",
+                "subj": subject,
+                "when": relative(int(m.get("date") or 0) // 1000, now),
+                "unread": bool(m.get("unread")),
+                "reply": wants and not promoted,
+                "why": why if wants and not promoted else "",
+                "snip": snip[:220],
+                "link": f"https://mail.google.com/mail/u/?authuser={urllib.parse.quote(account_email)}#all/{m.get('thread') or m.get('id') or ''}",
+            }
+        )
+    # The ones that want an answer first, newest of those first, then the rest newest first.
+    msgs.sort(key=lambda m: (not m["reply"], 0))
+    return {
+        "at": data.get("at") or now,
+        "account": account_email or None,
+        "total": data.get("total"),
+        "unread": data.get("unread") if data.get("unread") is not None else len([m for m in msgs if m["unread"]]),
+        "today": data.get("today"),
+        "msgs": msgs,
+    }
+
+
+def pretty(data: dict) -> str:
+    msgs = data["msgs"]
+    if not msgs:
+        return "Nothing new in the inbox."
+
+    def show(value):
+        return "?" if value is None else value
+
+    head = [f"{data['account'] or 'inbox'} · {show(data['total'])} in inbox · {show(data['unread'])} unread"]
+    if data.get("today") is not None:
+        head[0] += f" · {data['today']} today"
+    lines = head
+    wants = [m for m in msgs if m["reply"]]
+    if wants:
+        lines.append("")
+        lines.append("NEEDS A REPLY")
+        for m in wants:
+            lines.append(f"  ● {m['from'][:22]:<22} {m['subj'][:44]:<44} {m['when']}")
+    rest = [m for m in msgs if not m["reply"]]
+    if rest:
+        lines.append("")
+        lines.append("INBOX")
+        for m in rest:
+            dot = "●" if m["unread"] else "○"
+            lines.append(f"  {dot} {m['from'][:22]:<22} {m['subj'][:44]:<44} {m['when']}")
+    return "\n".join(lines)
+
+
+def login(email=None):
+    if not (SKILL / "scripts/auth.js").is_file():
+        die(f"the google-workspace skill isn't at {SKILL}", 2)
+    if not email:
+        email = os.environ.get("OWL_MAIL_ACCOUNT") or config().get("email")
+    if not email:
+        email = input("Google account to sign in: ").strip()
+        if not email:
+            die("no account given", 2)
+    print(f"Signing in {email}. The browser opens; approve Gmail access, and this finishes by itself.", file=sys.stderr)
+    sys.exit(subprocess.run([NODE, str(SKILL / "scripts/auth.js"), "login", "--email", email]).returncode)
+
+
+def main(argv):
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    limit = int(config().get("limit") or 30)
+    email = None
+    for i, a in enumerate(argv[1:]):
+        if a == "--limit" and i + 2 <= len(argv) - 1:
+            limit = max(1, int(argv[i + 2]))
+        elif a == "--email" and i + 2 <= len(argv) - 1:
+            email = argv[i + 2]
+    if args and args[0] in ("-h", "help"):
+        print(__doc__.strip())
+        return 0
+    command = args[0] if args else "mail"
+
+    if command == "accounts":
+        known = accounts()
+        print("\n".join(known) if known else "No Google account is signed in. Run: owl-mail login --email you@example.com")
+        return 0
+    if command == "login":
+        login(email)
+    if command in ("json", "mail"):
+        if not node_available():
+            if command == "json":
+                print(json.dumps({"at": int(time.time()), "msgs": [], "error": "node is not installed"}))
+                return 1
+            die("node isn't on PATH — `mise use -g node@22` installs it", 2)
+        # A fixture is what the tests below render: it needs no account and no network.
+        if not accounts() and not os.environ.get("OWL_MAIL_FIXTURE"):
+            if command == "json":
+                print(
+                    json.dumps(
+                        {
+                            "at": int(time.time()),
+                            "msgs": [],
+                            "error": "no account signed in: owl-mail login --email you@example.com",
+                        }
+                    )
+                )
+                return 1
+            account()  # dies with the login hint
+        data = shape(fetch(account(email) if not os.environ.get("OWL_MAIL_FIXTURE") else "fixture@example.com", limit))
+        if command == "json":
+            print(json.dumps(data, separators=(",", ":")))
+        else:
+            print(pretty(data))
+        return 0
+    if command == "whoami":
+        print(account(email))
+        return 0
+    print(__doc__.strip(), file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv))
+    except KeyboardInterrupt:
+        sys.exit(130)

@@ -275,7 +275,9 @@ function createOAuthClientFromCredentials(credentialsJson) {
 function createCloudOAuthClient() {
   const google = getGoogleApis();
   const { clientId } = getWorkspaceClientConfig();
-  return new google.auth.OAuth2({ clientId });
+  // A cloud client has no client secret, so the library must never refresh on its own: a direct refresh is
+  // rejected with `invalid_request`. authorize() refreshes through the cloud function before it gets here.
+  return new google.auth.OAuth2({ clientId, eagerRefreshThresholdMillis: 0 });
 }
 
 function resolveAuthMode(token) {
@@ -327,7 +329,9 @@ function isExpiringSoon(credentials) {
   if (!credentials || !credentials.expiry_date) {
     return false;
   }
-  return credentials.expiry_date < Date.now() + 60_000;
+  // Refresh 5 minutes ahead: further out than start within an hour, and further out than the library's own
+  // eager refresh, which cannot work here.
+  return credentials.expiry_date < Date.now() + 5 * 60_000;
 }
 
 function openUrlInBrowser(targetUrl) {

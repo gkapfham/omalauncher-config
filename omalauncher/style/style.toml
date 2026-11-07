@@ -4,12 +4,12 @@
 
 version = 1
 theme = "vitamin"
+background = "image-1794084315188.png"
 font = "Maple Mono NF"
 
 [home]
 recent-apps = false
 columns = 8
-single-page = true
 
 [widgets]
 opacity = 0.93
@@ -19,7 +19,7 @@ border-width = 0
 monochrome = true
 
 [corners]
-scale = 1
+scale = 0.5
 
 [status-bar]
 shown = false
