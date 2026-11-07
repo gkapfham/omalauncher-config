@@ -1,0 +1,112 @@
+widget "pi spend" {
+  size: 8x5
+  minSize: 3x3
+  padding: 12
+  requires { pacman: ["python"] }
+
+  meta {
+    owl: 17
+    description: "What pi has cost today: the dollars, the tokens and the sessions it recorded, the last week as a chart, and the OpenCode Go quota when pi-quotas is set up. No API key, no network: it reads pi's own logs"
+    version: "1.0"
+    license: "MIT"
+    category: "system"
+  }
+
+  // owl-usage adds up pi's session logs by the phone's day and, when pi-quotas has an OpenCode Go
+  // workspace and cookie, the quota windows it scrapes. A failed run keeps what's on the tile.
+  source u = cmd("~/.local/bin/owl-usage") every 2m json timeout 60s status
+  source now = clock every 1m
+
+  // The last good answer, so a run that fails doesn't blank the tile.
+  state last = null persist
+  on u first { if u.ok { last = u.out } }
+  on u { if u.ok { last = u.out } }
+
+  let raw = u != null && u.ok ? u.out : last
+  let failed = raw == null
+  let today = raw == null ? null : (raw.today ?? null)
+  let cost = today == null ? 0 : (today.cost ?? 0)
+  let tokens = today == null ? 0 : (today.tokens ?? 0)
+  let sessions = today == null ? 0 : (today.sessions ?? 0)
+  let days = raw == null ? [] : (raw.days ?? [])
+  let series = days.map(d => d.cost ?? 0)
+  let week = raw == null ? null : (raw.week ?? null)
+  let weekCost = week == null ? 0 : (week.cost ?? 0)
+  let weekTokens = week == null ? 0 : (week.tokens ?? 0)
+  let model = raw == null ? null : (raw.model ?? null)
+  let running = raw == null ? 0 : (raw.running ?? 0)
+  let quota = raw == null ? null : (raw.quota ?? null)
+  let quotaError = raw == null ? null : (raw.quotaError ?? null)
+  // Dollars: cents are enough above a dollar, thousandths below it, as small spends sit near zero.
+  let money = cost >= 1 ? fmtNum(cost, 2) : fmtNum(cost, 3)
+  let weekMoney = weekCost >= 1 ? fmtNum(weekCost, 2) : fmtNum(weekCost, 3)
+
+  onTap: launcher("agents")
+
+  // One quota window: a bar, how much of it is used, and when it resets.
+  component Quota(label, w) {
+    if w != null {
+      Row {
+        align: center
+        gap: 8
+        Text { text: label; style: small; font: mono; color: muted; width: 34 }
+        Progress { value: w.pct ?? 0; max: 100; color: (w.pct ?? 0) >= 85 ? red : (w.pct ?? 0) >= 60 ? yellow : accent; fill: width; weight: 1 }
+        Text { text: "${round(w.pct ?? 0)}%"; style: small; bold: true; width: 34; align: end }
+        Text { text: "resets ${fmtTime(now + (w.resetIn ?? 0), "HH:mm")}"; style: small; color: muted; maxLines: 1 }
+      }
+    }
+  }
+
+  Column {
+    gap: 4
+    fill: true
+    Row {
+      align: center
+      gap: 6
+      Text { text: "pi spend"; style: muted; maxLines: 1 }
+      Spacer { weight: 1 }
+      if running > 0 {
+        Spacer { size: 7; radius: 4; background: green }
+        Text { text: running == 1 ? "running" : "${running} running"; style: small; color: green; maxLines: 1 }
+      }
+    }
+    Row {
+      align: bottom
+      gap: 8
+      Text {
+        text: failed ? "…" : "$" + money
+        style: huge
+        bold: true
+        maxLines: 1
+        color: failed ? muted : foreground
+      }
+      Column {
+        gap: 0
+        Text { text: "today"; style: small; color: muted; maxLines: 1 }
+        Text {
+          text: failed ? (u == null ? "reading" : (u.err ?? "no logs yet")) : "${fmtNum(tokens, {compact: true})} tokens · ${sessions} ${sessions == 1 ? "session" : "sessions"}"
+          style: small
+          color: muted
+          maxLines: 1
+        }
+      }
+    }
+    Sparkline { values: series; min: 0; color: accent; area: true; thickness: 2; fill: width; weight: 1 }
+    Row {
+      align: center
+      gap: 6
+      Text { text: "7 days"; style: small; color: muted; maxLines: 1 }
+      Spacer { weight: 1 }
+      Text { text: "$" + weekMoney + " · " + fmtNum(weekTokens, {compact: true}) + " tokens"; style: small; color: muted; maxLines: 1 }
+    }
+    if quota != null {
+      Quota { label: "5h"; w: quota.rolling ?? null }
+      Quota { label: "week"; w: quota.weekly ?? null }
+    } else if quotaError != null {
+      Text { text: "quota: ${quotaError}"; style: small; color: muted; maxLines: 1 }
+    }
+    if model != null {
+      Text { text: "most used: ${model}"; style: small; color: muted; maxLines: 1 }
+    }
+  }
+}

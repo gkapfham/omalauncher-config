@@ -9,10 +9,13 @@ font = "Maple Mono NF"
 
 [home]
 recent-apps = false
+empty-page-left = false
+empty-page-right = false
 columns = 8
 
 [widgets]
 opacity = 0.93
+frost = true
 border-width = 0
 
 [icons]

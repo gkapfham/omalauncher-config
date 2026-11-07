@@ -54,6 +54,9 @@ mkdir -p bin pi/agent/skills
 if [ -f "$HOME"/.local/bin/owl-agenda ]; then cp -p "$HOME"/.local/bin/owl-agenda bin/; fi
 if [ -f "$HOME"/.local/bin/owl-mail ]; then cp -p "$HOME"/.local/bin/owl-mail bin/; fi
 if [ -f "$HOME"/.local/bin/owl-config ]; then cp -p "$HOME"/.local/bin/owl-config bin/; fi
+if [ -f "$HOME"/.local/bin/owl-usage ]; then cp -p "$HOME"/.local/bin/owl-usage bin/; fi
+# omarchy-sshd starts sshd for the sshd tile, and lives in /usr/local/bin, outside the home.
+if [ -f /usr/local/bin/omarchy-sshd ]; then cp -p /usr/local/bin/omarchy-sshd bin/; fi
 if [ -d "$pi"/skills ]; then tar -C "$pi"/skills --exclude=node_modules -cf - . | tar -C pi/agent/skills -xf -; fi
 
 git add -A

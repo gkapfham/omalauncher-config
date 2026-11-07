@@ -63,6 +63,16 @@ if [ -f bin/owl-config ]; then
   cp -p bin/owl-config "$HOME"/.local/bin/
   chmod +x "$HOME"/.local/bin/owl-config
 fi
+if [ -f bin/owl-usage ]; then
+  mkdir -p "$HOME"/.local/bin
+  cp -p bin/owl-usage "$HOME"/.local/bin/
+  chmod +x "$HOME"/.local/bin/owl-usage
+fi
+# The sshd tile runs this; it belongs in /usr/local/bin, not the home.
+if [ -f bin/omarchy-sshd ]; then
+  cp -p bin/omarchy-sshd /usr/local/bin/omarchy-sshd
+  chmod +x /usr/local/bin/omarchy-sshd
+fi
 if [ -d pi/agent/skills ]; then
   cp -Rp pi/agent/skills/. "$pi"/skills/
   # The skill's npm deps are not in the repository; npm puts them back.

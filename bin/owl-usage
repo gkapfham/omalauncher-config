@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+"""Today's pi spend, as JSON, for the pi spend tile.
+
+Reads pi's own session logs (~/.pi/agent/sessions) - no API key, no network - and adds up the
+cost and tokens pi recorded for each message, by the phone's local day. Also says how many pi
+processes run now, and, when pi-quotas is set up for OpenCode Go, the quota windows it scrapes.
+
+    owl-usage            one JSON object on stdout
+
+The tile reads it every couple of minutes; a week of logs takes about a quarter of a second.
+"""
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.request
+from datetime import datetime, timedelta
+
+HOME = os.path.expanduser("~")
+SESSIONS = os.path.join(HOME, ".pi", "agent", "sessions")
+DAYS = 7
+GO_CONFIGS = [
+    os.path.join(HOME, ".config", "opencode", "opencode-quota", "opencode-go.json"),
+    os.path.join(HOME, ".config", "opencode-go", "config.json"),
+]
+
+
+def local_day(ts):
+    """A pi timestamp ('2026-11-07T20:28:35.958Z') as the phone's own day."""
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone().strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def read_sessions():
+    """{day: {cost, tokens, msgs, files:set}}, plus the token count per model over the week."""
+    days = {}
+    models = {}
+    files = set()
+    cutoff = time.time() - DAYS * 86400
+    for path in glob.glob(os.path.join(SESSIONS, "**", "*.jsonl"), recursive=True):
+        try:
+            if os.path.getmtime(path) < cutoff:
+                continue
+            with open(path, "r", errors="ignore") as fh:
+                lines = fh.readlines()
+        except OSError:
+            continue
+        for line in lines:
+            if '"usage"' not in line:
+                continue
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if entry.get("type") != "message":
+                continue
+            day = local_day(entry.get("timestamp", ""))
+            msg = entry.get("message") or {}
+            usage = msg.get("usage") or {}
+            if day is None or not usage:
+                continue
+            bucket = days.setdefault(day, {"cost": 0.0, "tokens": 0, "msgs": 0, "files": set()})
+            bucket["cost"] += float((usage.get("cost") or {}).get("total") or 0)
+            bucket["tokens"] += int(usage.get("totalTokens") or 0)
+            bucket["msgs"] += 1
+            bucket["files"].add(path)
+            files.add(path)
+            model = msg.get("model")
+            if model:
+                models[model] = models.get(model, 0) + int(usage.get("totalTokens") or 0)
+    return days, models, files
+
+
+def pi_running():
+    try:
+        out = subprocess.run(["pgrep", "-x", "pi"], capture_output=True, text=True, timeout=5).stdout
+        return len([p for p in out.split() if p.strip()])
+    except Exception:
+        return 0
+
+
+def scrape_go_quota():
+    """pi-quotas' OpenCode Go windows: the dashboard's hydration data, as it reads it."""
+    cfg_path = next((p for p in GO_CONFIGS if os.path.isfile(p)), None)
+    if cfg_path is None:
+        return None, None
+    try:
+        with open(cfg_path) as fh:
+            cfg = json.load(fh)
+        workspace = str(cfg.get("workspaceId") or "").strip()
+        cookie = str(cfg.get("authCookie") or "").strip()
+    except Exception as err:
+        return None, "config unreadable: %s" % err
+    if not workspace or not cookie:
+        return None, "workspaceId and authCookie both needed"
+    url = "https://opencode.ai/workspace/%s/go" % urllib.parse.quote(workspace, safe="")
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 Firefox/148.0",
+        "Accept": "text/html",
+        "Cookie": "auth=%s" % cookie,
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode("utf-8", "replace")
+    except Exception as err:
+        return None, "dashboard: %s" % err
+    windows = {}
+    for key in ("rolling", "weekly", "monthly"):
+        pct = re.search(key + r"Usage:\$R\[\d+\]=\{[^}]*usagePercent:(-?\d+(?:\.\d+)?)[^}]*resetInSec:(-?\d+(?:\.\d+)?)", html)
+        if not pct:
+            pct = re.search(key + r"Usage:\$R\[\d+\]=\{[^}]*resetInSec:(-?\d+(?:\.\d+)?)[^}]*usagePercent:(-?\d+(?:\.\d+)?)", html)
+            if pct:
+                windows[key] = {"pct": float(pct.group(2)), "resetIn": float(pct.group(1))}
+            continue
+        windows[key] = {"pct": float(pct.group(1)), "resetIn": float(pct.group(2))}
+    if not windows:
+        return None, "dashboard: no usage windows found"
+    return windows, None
+
+
+def main():
+    days, models, files = read_sessions()
+    today = datetime.now().astimezone().strftime("%Y-%m-%d")
+    series = []
+    for i in range(DAYS - 1, -1, -1):
+        day = (datetime.now().astimezone() - timedelta(days=i)).strftime("%Y-%m-%d")
+        bucket = days.get(day, {})
+        series.append({"d": day, "cost": round(bucket.get("cost", 0.0), 4),
+                       "tokens": bucket.get("tokens", 0), "sessions": len(bucket.get("files", ()))})
+    t = days.get(today, {})
+    week_cost = sum(b.get("cost", 0.0) for b in days.values())
+    week_tokens = sum(b.get("tokens", 0) for b in days.values())
+    top_model = max(models, key=models.get) if models else None
+    quota, quota_error = scrape_go_quota()
+    print(json.dumps({
+        "today": {
+            "cost": round(t.get("cost", 0.0), 4),
+            "tokens": t.get("tokens", 0),
+            "sessions": len(t.get("files", ())),
+            "msgs": t.get("msgs", 0),
+        },
+        "week": {"cost": round(week_cost, 4), "tokens": week_tokens, "sessions": len(files)},
+        "days": series,
+        "model": top_model,
+        "running": pi_running(),
+        "quota": quota,
+        "quotaError": quota_error,
+        "at": int(time.time()),
+    }))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

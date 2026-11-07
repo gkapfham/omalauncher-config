@@ -1,0 +1,117 @@
+widget "maintenance" {
+  size: 8x4
+  minSize: 4x3
+  padding: 12
+
+  meta {
+    owl: 17
+    description: "What wants doing on this phone: Arch and Android updates waiting, setup changes not saved yet, and whether the last backup to Drive worked. Tap a row to fix it"
+    version: "1.0"
+    license: "MIT"
+    category: "system"
+  }
+
+  requires { pacman: ["git", "pacman", "coreutils"] }
+
+  // Pending Arch updates, counted against a private copy of the databases in /tmp, so the real ones
+  // stay untouched and pacman's lock is never taken (the same way checkupdates works).
+  source pac = cmd("""
+    t=/tmp/owl-maint
+    mkdir -p "$t"
+    ln -sfn /var/lib/pacman/local "$t/local"
+    pacman -Sy --dbpath "$t" --logfile /dev/null >/dev/null 2>&1 || { echo error; exit; }
+    pacman -Qu --dbpath "$t" | wc -l
+  """) every 1h timeout 120s
+
+  // Android's own system updates, as the dot on the drawer's settings button counts them.
+  source d = android.drawer
+
+  // The setup's own repository: how many files changed since the last save, and when that save was.
+  source repo = cmd("""
+    cd "$HOME/omalauncher-config" 2>/dev/null || { echo "0 0"; exit; }
+    printf '%s %s' "$(git status --porcelain 2>/dev/null | wc -l)" "$(git log -1 --format=%ct 2>/dev/null || echo 0)"
+  """) every 5m
+
+  // What owl-config wrote the last time it saved or restored: {state, message, at}.
+  source st = file("~/.cache/owl-config/status.json") json
+  source now = clock every 1m
+
+  let pacFailed = pac == "error"
+  let pending = pac == null || pacFailed ? null : num(pac, null)
+  let android = d == null ? null : (d.updates ?? 0)
+  let changed = repo == null ? null : num(words(repo)[0] ?? "", null)
+  let savedAt = repo == null ? null : num(words(repo)[1] ?? "", null)
+  let saving = st != null && (st.state == "saving" || st.state == "restoring")
+  let backupState = st == null ? null : (st.state ?? null)
+  let backupNote = st == null ? "never" : (st.state == "error" ? (st.message ?? "failed") : fmtAgo(st.at ?? now, now))
+
+  // Saving the whole setup and uploading it is what this tile is about, so a tap on the tile does that.
+  onTap: run("$HOME/omalauncher-config/drive-backup.sh")
+
+  Column {
+    gap: 2
+    fill: true
+    Row {
+      align: center
+      Text { text: "maintenance"; style: muted; maxLines: 1 }
+      Spacer { weight: 1 }
+      if saving { Text { text: st.state == "saving" ? "saving…" : "restoring…"; style: small; color: yellow } }
+    }
+    Row {
+      align: center
+      gap: 8
+      fill: width
+      onTap: terminal("pacman -Syu", "updates")
+      Text { text: "arch"; style: small; font: mono; color: muted; width: 66; maxLines: 1 }
+      Text {
+        text: pacFailed ? "—" : pending == null ? "…" : "${pending}"
+        style: body
+        bold: true
+        color: pacFailed ? red : pending == null ? muted : pending == 0 ? green : yellow
+        width: 30
+        maxLines: 1
+      }
+      Text { text: pacFailed ? "pacman offline" : pending == null ? "checking" : pending == 0 ? "up to date" : "tap to update"; style: small; color: muted; maxLines: 1; weight: 1 }
+    }
+    Row {
+      align: center
+      gap: 8
+      fill: width
+      onTap: launcher("settings")
+      Text { text: "android"; style: small; font: mono; color: muted; width: 66; maxLines: 1 }
+      Text { text: android == null ? "…" : "${android}"; style: body; bold: true; color: android == null ? muted : android == 0 ? green : yellow; width: 30; maxLines: 1 }
+      Text { text: android == null ? "reading" : android == 0 ? "up to date" : "system updates"; style: small; color: muted; maxLines: 1; weight: 1 }
+    }
+    Row {
+      align: center
+      gap: 8
+      fill: width
+      onTap: run("$HOME/omalauncher-config/save.sh")
+      Text { text: "config"; style: small; font: mono; color: muted; width: 66; maxLines: 1 }
+      Text { text: changed == null ? "…" : changed == 0 ? "✓" : "${changed}"; style: body; bold: true; color: changed == null ? muted : changed == 0 ? green : yellow; width: 30; maxLines: 1 }
+      Text {
+        text: changed == null ? "no repo" : changed == 0 ? "saved ${savedAt == null ? "" : fmtAgo(savedAt, now)}" : "unsaved · tap to save"
+        style: small
+        color: muted
+        maxLines: 1
+        weight: 1
+      }
+    }
+    Row {
+      align: center
+      gap: 8
+      fill: width
+      onTap: run("$HOME/omalauncher-config/drive-backup.sh")
+      Text { text: "backup"; style: small; font: mono; color: muted; width: 66; maxLines: 1 }
+      Text {
+        text: backupState == null ? "…" : backupState == "ok" ? "✓" : backupState == "error" ? "✕" : "…"
+        style: body
+        bold: true
+        color: backupState == null ? muted : backupState == "ok" ? green : backupState == "error" ? red : yellow
+        width: 30
+        maxLines: 1
+      }
+      Text { text: backupNote; style: small; color: muted; maxLines: 1; weight: 1 }
+    }
+  }
+}

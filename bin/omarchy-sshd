@@ -1,0 +1,51 @@
+#!/bin/sh
+# Starts sshd for this phone's proot, so a laptop on the same Wi-Fi or on the NetBird tunnel can log in.
+#
+#   omarchy-sshd          start it (does nothing if it already runs)
+#   omarchy-sshd stop     stop it
+#
+# Android won't let the launcher's Linux bind a port below 1024, so this listens on 2222 (set
+# OMARCHY_SSHD_PORT to change it) and only for keys: paste yours into ~/.ssh/authorized_keys,
+# which the sshd tile opens with a tap when it's empty. Passwords are off on purpose: this is
+# reachable from the tunnel.
+set -eu
+
+port=${OMARCHY_SSHD_PORT:-2222}
+keys=$HOME/.ssh/authorized_keys
+log=$HOME/.cache/omarchy-sshd.log
+
+if [ "${1:-start}" = "stop" ]; then
+  pkill -f "sshd -D -p $port" 2>/dev/null || true
+  echo "sshd stopped"
+  exit 0
+fi
+
+mkdir -p "$HOME/.ssh" "$HOME/.cache"
+chmod 700 "$HOME/.ssh"
+[ -f "$keys" ] || : > "$keys"
+chmod 600 "$keys"
+# Host keys survive in /etc/ssh, so a laptop's known_hosts keeps working across restarts.
+ssh-keygen -A >/dev/null 2>&1 || true
+
+if pgrep -f "sshd -D -p $port" >/dev/null 2>&1; then
+  exit 0
+fi
+
+# setsid -f: it outlives the tile's shell and the widget, so sshd stays up until the phone stops it.
+setsid -f /usr/bin/sshd -D -p "$port" \
+  -o "PidFile=$HOME/.cache/omarchy-sshd.pid" \
+  -o PasswordAuthentication=no \
+  -o PermitRootLogin=prohibit-password \
+  -o UsePAM=no \
+  -o AllowTcpForwarding=yes \
+  -o X11Forwarding=no \
+  -o ClientAliveInterval=60 \
+  >> "$log" 2>&1
+
+sleep 1
+if pgrep -f "sshd -D -p $port" >/dev/null 2>&1; then
+  echo "sshd listening on port $port"
+else
+  echo "sshd did not start: see $log" >&2
+  exit 1
+fi
