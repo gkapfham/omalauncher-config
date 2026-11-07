@@ -15,7 +15,7 @@ face = "market-face-simonschubert-omarchy.owl"
 [[page]]
 tiles = [
   { widget = "market-rat0sh1-quick-settings.owl", x = 0, y = 0, w = 8, h = 2 },
-  { widget = "30-agenda.owl", x = 0, y = 2, w = 8, h = 12 },
+  { widget = "30-agenda.owl", x = 0, y = 2, w = 8, h = 13 },
 ]
 
 [[page]]
@@ -53,5 +53,5 @@ tiles = [
 [[page]]
 tiles = [
   { widget = "40-pi-spend.owl", x = 0, y = 0, w = 8, h = 5 },
-  { widget = "45-maintenance.owl", x = 0, y = 5, w = 8, h = 4 },
+  { widget = "45-maintenance.owl", x = 0, y = 5, w = 8, h = 3 },
 ]

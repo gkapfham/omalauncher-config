@@ -116,3 +116,6 @@ widget "maintenance" {
     }
   }
 }
+
+// backup: owl-config save keeps status.json and the list of backups up to date.
+

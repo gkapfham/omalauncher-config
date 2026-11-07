@@ -18,10 +18,10 @@ It also carries the tools that make that true: `save.sh`, `restore.sh`, `drive.j
 | Theme | `vitamin` |
 | Wallpaper | `image-1793586720734.png` from the `vitamin` theme's backgrounds |
 | Font | `Maple Mono NF`, terminal `Maple Mono NF:style=SemiBold` |
-| Grid | 9 columns, about 15 rows |
+| Grid | 8 columns, about 15 rows |
 | Swipe up | `drawer.owl` — the app drawer |
 | Swipe down | `controls.owl` — toggles, volume, battery, screen, media, alarm, notifications |
-| Home | a face, then three pages of tiles, then a backup/restore page |
+| Home | a face, then six pages of tiles, then a maintenance page |
 | Backups | local git plus Google Drive → `omalauncher-backups`, newest 10 |
 
 ---
@@ -42,6 +42,8 @@ It also carries the tools that make that true: `save.sh`, `restore.sh`, `drive.j
 | `bin/owl-agenda` | `~/.local/bin/` — the calendar CLI behind `30-agenda.owl` |
 | `bin/owl-mail` | `~/.local/bin/` — the Gmail CLI behind `20-mail.owl` |
 | `bin/owl-config` | `~/.local/bin/` — the backup/restore CLI behind the tiles and the app |
+| `bin/owl-usage` | `~/.local/bin/` — today's pi spend, read from pi's session logs, behind `40-pi-spend.owl` |
+| `bin/omarchy-sshd` | `/usr/local/bin/` — starts sshd on port 2222 for `sshd.owl` |
 | `drive.js`, `drive-backup.sh` | the Google Drive side of the backup |
 | `save.sh`, `restore.sh` | snapshot to git, and apply a snapshot |
 
@@ -85,12 +87,16 @@ rewrites the file when a tile is moved; edits here show within a second, and `ho
 | Page | What is on it |
 | --- | --- |
 | first | the **omarchy** face (a whole page left of the first tile page) |
-| page 2 | quick settings 9×2 at (0,0); agenda 9×13 at (0,2) |
-| page 3 | today 9×5 at (0,0); storage 9×7 at (0,5); now-playing 9×3 at (0,12) |
-| page 4 | backup 5×3 at (0,0); restore 5×3 at (0,3) |
+| page 2 | quick settings 8×2 at (0,0); agenda 8×12 at (0,2); sshd 8×1 at (0,14) |
+| page 3 | mail 8×15 at (0,0) |
+| page 4 | notifications 8×5 at (0,0); today 8×6 at (0,5); now-playing 8×4 at (0,11) |
+| page 5 | storage 8×8 at (0,0); backup 4×5 at (0,8); restore 4×5 at (4,8); recent apps 8×2 at (0,13) |
+| page 6 | speedtest 8×10 at (0,0); netbird 8×5 at (0,10) |
+| page 7 | hacker news 8×15 at (0,0) |
+| page 8 | pi spend 8×5 at (0,0); maintenance 8×3 at (0,5) |
 
-Pages 2 and 3 fill all 15 rows. Page 4 is the backup/restore utility page; the two tiles can be dragged anywhere, and
-their files declare a 3×3 starting size.
+Pages 2 to 7 fill all 15 rows. Page 8 is the newest one and has rows to spare; every tile can be dragged anywhere, and
+each file declares a starting size of its own.
 
 ---
 
@@ -143,6 +149,13 @@ folders are Arch's. It scans hourly (120 s timeout) and detaches cleaning with `
 Page 3, 9×3. Album art, title/artist, a seek bar, and previous/play/next. It uses `android.media`, so it needs the same
 notification access as media widgets. The title scrolls when it does not fit; with nothing playing it says so.
 
+### `sshd.owl` — SSH into the phone
+Page 2, 8×1. Whether sshd runs, the address to reach it on (the NetBird tunnel first, then Wi-Fi) and the port, with a
+tap to start it. `/usr/local/bin/omarchy-sshd` starts it on **2222**, because Android won't let the launcher's Linux bind
+a port below 1024, and with passwords off: only keys in `~/.ssh/authorized_keys` get in. While that file is empty the tile
+says `no key` and a tap opens it in the editor, so there is a way in before the first key is pasted. The server is
+started again by the tile if it ever goes, and `omarchy-sshd stop` stops it. Requires `openssh` and `iproute2`.
+
 ### `backup-tile.owl` — backup
 Page 4. Shows the current backup state, the newest saved setup's date/time/size, and a **back up** button; the tile's
 screen has **back up now**, **refresh list**, and the same saved-setups list as the app.
@@ -151,6 +164,21 @@ screen has **back up now**, **refresh list**, and the same saved-setups list as 
 Page 4. Shows the newest saved setup and a **restore** button; the screen has **check newest**, **refresh list**, the full
 saved-setups list, and **undo last restore** after a restore. Restoring is checked and can roll itself back — see
 **Backup and restore**.
+
+### `40-pi-spend.owl` — pi spend
+Page 8, 8×5. What pi cost today: dollars, tokens and sessions, the last seven days as a sparkline, the most-used model,
+and whether pi is running now. `owl-usage` reads pi's own session logs (`~/.pi/agent/sessions`), adding up the cost and
+tokens pi recorded for each message by the phone's local day — no API key, no network, about a quarter of a second for a
+week of logs. When `pi-quotas` is set up for OpenCode Go (`~/.config/opencode/opencode-quota/opencode-go.json` with a
+workspace id and auth cookie), the tile also shows the 5-hour and weekly quota windows as bars. A failed run keeps the
+last good numbers. Requires `python`; tapping opens the agents screen.
+
+### `45-maintenance.owl` — maintenance
+Page 8, 8×3. Four rows that would otherwise go unnoticed: pending Arch updates (counted against a private copy of the
+databases in `/tmp`, so pacman's lock is never taken), Android's system updates, setup files changed but not saved yet,
+and whether the last backup to Drive worked. Green at zero, yellow above it, red for a failure. Each row acts: Arch opens
+`pacman -Syu` in a terminal, Android opens the launcher's settings, config runs `save.sh`, and backup runs
+`owl-config save` (which also refreshes `status.json`). Requires `git`, `pacman` and `coreutils`.
 
 ### `backup.owl` — backup & restore app
 In the app drawer. The same backup/restore screen as the tiles, for when home is not showing. It is an OWL app, not part
@@ -264,15 +292,16 @@ Every widget declares what its commands need in `requires { pacman: [ … ] }`. 
 | package | used by |
 | --- | --- |
 | `btop` | quick settings' btop tile; the face's terminal use |
-| `python` | `owl-config` (backup/restore safety) |
+| `python` | `owl-config` (backup/restore safety), `owl-usage` (the pi spend tile) |
 | `nodejs` | `owl-agenda`, `owl-mail`, `drive.js`, the Google Workspace skill |
-| `git` | `save.sh` commits, `owl-config` |
+| `git` | `save.sh` commits, `owl-config`, the maintenance tile's config row |
 | `util-linux` | `setsid`, `flock` |
 | `zstd` | the compressed font bundle |
 | `tar` | the font bundle |
 | `fontconfig` | `fc-cache` after a font restore |
 | `coreutils`, `findutils`, `util-linux`, `gawk`, `sed`, `jq`, `pacman-contrib` | the storage widget's scan and clean |
-| `pacman` | the face's package count |
+| `pacman` | the face's package count, the maintenance tile's pending updates |
+| `openssh`, `iproute2` | `sshd.owl` and `omarchy-sshd` (port 2222, keys only) |
 
 Install anything missing with:
 
