@@ -20,18 +20,23 @@ widget "recent" {
   let gap = 6
   let padX = 4
   let padY = 2
+  // Left below the row, so the icons keep a little more air at the bottom than above them: the row sits at the top
+  // of the tile's room and this much of it is the room under it.
+  let padBottom = 18
   let cellsW = max(1, cols ?? 8)
   let cellsH = max(1, rows ?? 1)
-  let room = min(((tileWidth ?? 400) - 2 * padX) / cellsW, ((tileHeight ?? 44) - 2 * padY) / cellsH)
+  let room = min(((tileWidth ?? 400) - 2 * padX) / cellsW, ((tileHeight ?? 44) - padY - padBottom) / cellsH)
   let icon = clamp(round(room * fill), 20, 44)
   // How many fit, each with a gap after it: width and height leave a gap's worth of slack for the last one.
   let across = clamp(floor(((tileWidth ?? 400) - 2 * padX + gap) / (icon + gap)), 1, cellsW)
-  let down = clamp(floor(((tileHeight ?? 44) - 2 * padY + gap) / (icon + gap)), 1, cellsH)
+  let down = clamp(floor(((tileHeight ?? 44) - padY - padBottom + gap) / (icon + gap)), 1, cellsH)
   let apps = take(r ?? [], across * down)
 
   Column {
+    // The row starts at the tile's top and what padBottom leaves of its height stays under it, so the icons sit a
+    // little above the tile's middle rather than in it.
     fill: true
-    justify: center
+    justify: start
     Grid {
       columns: across
       gap: gap

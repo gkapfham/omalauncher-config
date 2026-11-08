@@ -15,43 +15,46 @@ face = "market-face-simonschubert-omarchy.owl"
 [[page]]
 tiles = [
   { widget = "market-rat0sh1-quick-settings.owl", x = 0, y = 0, w = 8, h = 2 },
-  { widget = "30-agenda.owl", x = 0, y = 2, w = 8, h = 13 },
+  { widget = "30-agenda.owl", x = 0, y = 2, w = 8, h = 14 },
 ]
 
 [[page]]
 tiles = [
-  { widget = "20-mail.owl", x = 0, y = 0, w = 8, h = 15 },
+  { widget = "20-mail.owl", x = 0, y = 0, w = 8, h = 14 },
+  { widget = "05-recent.owl", x = 0, y = 14, w = 8, h = 2 },
 ]
 
 [[page]]
 tiles = [
   { widget = "market-simonschubert-notifications.owl", x = 0, y = 0, w = 8, h = 5 },
-  { widget = "10-today.owl", x = 0, y = 5, w = 8, h = 6 },
-  { widget = "market-simonschubert-now-playing.owl", x = 0, y = 11, w = 8, h = 4 },
+  { widget = "10-today.owl", x = 0, y = 5, w = 8, h = 7 },
+  { widget = "market-simonschubert-now-playing.owl", x = 0, y = 12, w = 8, h = 4 },
 ]
 
 [[page]]
 tiles = [
-  { widget = "market-rcrohmana-storage.owl", x = 0, y = 0, w = 8, h = 8 },
-  { widget = "backup-tile.owl", x = 0, y = 8, w = 4, h = 5 },
-  { widget = "restore-tile.owl", x = 4, y = 8, w = 4, h = 5 },
-  { widget = "05-recent.owl", x = 0, y = 13, w = 8, h = 2 },
+  { widget = "40-pi-spend.owl", x = 0, y = 0, w = 8, h = 6 },
+  { widget = "market-weebowiz-dev-logs.owl", x = 0, y = 6, w = 8, h = 5 },
+  { widget = "market-simonschubert-github.owl", x = 0, y = 11, w = 8, h = 5 },
 ]
 
 [[page]]
 tiles = [
-  { widget = "market-nicomaure-speedtest.owl", x = 0, y = 0, w = 8, h = 10 },
-  { widget = "market-nyaadesu-netbird.owl", x = 0, y = 10, w = 8, h = 4 },
-  { widget = "sshd.owl", x = 0, y = 14, w = 8, h = 1 },
+  { widget = "market-simonschubert-hacker-news.owl", x = 0, y = 0, w = 8, h = 8 },
+  { widget = "market-rwdpena-widget-drain.owl", x = 0, y = 8, w = 8, h = 8 },
 ]
 
 [[page]]
 tiles = [
-  { widget = "market-simonschubert-hacker-news.owl", x = 0, y = 0, w = 8, h = 15 },
+  { widget = "market-nicomaure-speedtest.owl", x = 0, y = 0, w = 8, h = 11 },
+  { widget = "market-nyaadesu-netbird.owl", x = 0, y = 11, w = 8, h = 3 },
+  { widget = "sshd.owl", x = 0, y = 14, w = 8, h = 2 },
 ]
 
 [[page]]
 tiles = [
-  { widget = "40-pi-spend.owl", x = 0, y = 0, w = 8, h = 5 },
-  { widget = "45-maintenance.owl", x = 0, y = 5, w = 8, h = 3 },
+  { widget = "market-rcrohmana-storage.owl", x = 0, y = 0, w = 8, h = 9 },
+  { widget = "backup-tile.owl", x = 0, y = 9, w = 4, h = 4 },
+  { widget = "restore-tile.owl", x = 4, y = 9, w = 4, h = 4 },
+  { widget = "45-maintenance.owl", x = 0, y = 13, w = 8, h = 3 },
 ]

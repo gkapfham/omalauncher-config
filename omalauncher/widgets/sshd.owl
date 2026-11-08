@@ -1,55 +1,117 @@
 widget "sshd" {
-  size: 8x1
-  minSize: 2x1
-  meta { owl: 12; description: "SSH into this phone: whether the server runs, the address to reach it on the NetBird tunnel or Wi-Fi, and a tap to start it"; version: "1.1"; license: "MIT"; category: "system" }
+  size: 8x2
+  minSize: 6x1
+  meta { owl: 12; description: "SSH into this phone: whether the server runs and for how long, the address to reach it on the NetBird tunnel or Wi-Fi, the command to paste on your laptop, and a tap to start or stop it"; version: "1.2"; license: "MIT"; category: "system" }
 
-  requires { pacman: ["openssh", "iproute2"] }
+  requires { pacman: ["openssh", "iproute2", "procps-ng"] }
 
-  // sshd itself, the addresses this phone answers on, and whether a key is allowed in yet.
-  source pid = cmd("pgrep -x sshd || true") every 30s
+  // Whether sshd runs and for how many seconds, read from the pid file omarchy-sshd writes: "up 3600" or "down".
+  source stat = cmd("""
+p=$(cat "$HOME/.cache/omarchy-sshd.pid" 2>/dev/null || true)
+if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then
+  echo "up $(ps -o etimes= -p "$p" 2>/dev/null | tr -d ' ')"
+else
+  echo down
+fi
+""") every 20s
+  // The addresses this phone answers on.
   source addrs = cmd("ip -br -4 addr show") every 30s
   // Non-empty lines of authorized_keys: without one, only a password could get in, and passwords are off.
   source keys = cmd("awk 'NF{n++} END{print n+0}' ~/.ssh/authorized_keys 2>/dev/null || echo 0") every 5m
-  // A clock that changes every half minute, so a server that went away is started again.
-  source tick = clock every 30s
+  // A clock that changes every 20s, so a server that went away is started again.
+  source tick = clock every 20s
 
   // Android won't let the launcher's Linux bind below 1024, so omarchy-sshd listens here.
   let port = 2222
-  let up = pid != null && join(words(pid), "") != ""
-  let keyed = (keys ?? "0") != "0"
+  let st = words(stat ?? "")
+  let up = st[0] == "up"
+  let secs = num(st[1], 0)
+  let keyN = num(keys ?? "0", 0)
+  let keyed = keyN > 0
   let ips = addrs == null ? [] : lines(addrs).map(l => words(l)).filter(w => len(w) > 2).map(w => split(w[2], "/")[0])
   // NetBird's tunnel is the 100.64.0.0/10 address (tun1, wt0); the phone's Wi-Fi is the other one.
   let nb = ips.find(a => split(a, ".")[0] == "100")
   let lan = ips.find(a => startsWith(a, "192.168.") || startsWith(a, "10.") || startsWith(a, "172."))
   let where = nb ?? lan ?? ""
+  // How long it's been up, as "12s", "5m", "3h" or "2d".
+  let upText = secs >= 86400 ? "${floor(secs / 86400)}d" : secs >= 3600 ? "${floor(secs / 3600)}h" : secs >= 60 ? "${floor(secs / 60)}m" : "${secs}s"
+  let keyText = keyN == 1 ? "1 key" : "${keyN} keys"
+  // The line to paste on the laptop, which a tap puts on the clipboard.
+  let sshCmd = "ssh -p ${port} root@${where == "" ? "…" : where}"
+
+  // False after a tap on the tile's stop, so the clock doesn't bring the server straight back.
+  state want = true
 
   // Starts it at boot, and again if it ever goes: the widget's shell outlives the tile, and the server with it.
-  on tick first { if !up { run("/usr/local/bin/omarchy-sshd") } }
-  on tick { if !up { run("/usr/local/bin/omarchy-sshd") } }
+  on tick first { if want && !up { run("/usr/local/bin/omarchy-sshd") } }
+  on tick { if want && !up { run("/usr/local/bin/omarchy-sshd") } }
 
-  // Down: start it. Up without a key: open the file to paste one into, since nothing can log in yet.
+  // Up with a key: copy the command. Up without one: open the file to paste a key into, since nothing can log in yet.
+  // Down: start it.
   onTap: {
-    if !up { run("/usr/local/bin/omarchy-sshd") }
+    if up && keyed { copy(sshCmd); haptic() }
     if up && !keyed { run("omarchy-edit ~/.ssh/authorized_keys") }
+    if !up { want = true; run("/usr/local/bin/omarchy-sshd") }
   }
 
   let dim = mix(muted, foreground, 0.5)
-  let color = !up ? muted : (keyed ? green : yellow)
+  let color = up ? (keyed ? green : yellow) : (want ? yellow : muted)
+  let status = up ? (keyed ? "on" : "no key") : (want ? "starting" : "stopped")
 
-  Row {
-    align: center
+  Column {
     gap: 8
+    justify: center
     fill: true
-    Spacer { size: 8; radius: 4; background: up ? color : alpha(muted, 0.5) }
-    Text { text: "sshd"; style: body; bold: true; maxLines: 1 }
-    Text { text: up ? (keyed ? "on" : "no key") : "off"; style: small; bold: true; color: color; maxLines: 1 }
-    Spacer { weight: 1 }
+    Row {
+      align: center
+      gap: 8
+      fill: width
+      Spacer { size: 8; radius: 4; background: up ? color : alpha(muted, 0.5) }
+      Text { text: "sshd"; style: body; bold: true; maxLines: 1 }
+      Text { text: status; style: small; bold: true; color: color; maxLines: 1 }
+      Spacer { weight: 1 }
+      // The key count only matters once there's one: before that, "no key" next to the name says it.
+      if up { Text { text: keyed ? "up ${upText} · ${keyText}" : "up ${upText}"; style: small; font: mono; color: dim; maxLines: 1 } }
+      // Up with a key: copy the command for the laptop. Up without one: open the file to paste a key into.
+      // A Text in a Row is as wide as its text, so these stay chips rather than filling the row.
+      if up {
+        Text {
+          text: keyed ? "copy" : "add key"
+          style: small
+          color: keyed ? foreground : yellow
+          background: alpha(keyed ? accent : yellow, 0.18)
+          radius: 6
+          padding: [10, 3]
+          maxLines: 1
+          onTap: {
+            if keyed { copy(sshCmd); haptic() }
+            if !keyed { run("omarchy-edit ~/.ssh/authorized_keys") }
+          }
+        }
+      }
+      // Start and stop without leaving home. Stopping is remembered here, so the clock above leaves it alone.
+      Text {
+        text: up ? "stop" : "start"
+        style: small
+        color: up ? muted : green
+        background: alpha(muted, 0.16)
+        radius: 6
+        padding: [10, 3]
+        maxLines: 1
+        onTap: {
+          if up { want = false; run("/usr/local/bin/omarchy-sshd stop") }
+          if !up { want = true; run("/usr/local/bin/omarchy-sshd") }
+        }
+      }
+    }
+    // The line to paste on the laptop, on its own row so it's never cut off. A tap on the tile copies it too.
     Text {
-      text: !up ? "tap to start" : (keyed ? (where == "" ? ":${port}" : "${where}:${port}") : "tap to add your key")
-      style: small
+      text: sshCmd
+      style: body
       font: mono
-      color: !up || keyed ? dim : yellow
+      color: up ? (keyed ? foreground : dim) : muted
       maxLines: 1
+      fill: width
     }
   }
 }

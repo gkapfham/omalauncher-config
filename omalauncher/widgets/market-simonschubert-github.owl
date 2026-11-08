@@ -1,0 +1,225 @@
+widget "github" {
+  meta { description: "Unread GitHub notifications, reviews waiting on you and your open pull requests, via the GitHub CLI; tap a count for the lists"; version: "1.7"; license: "MIT"; category: "dev"; owl: 16 }
+
+  // What it says, in the phone's language where it has a set.
+  strings {
+    en { notSignedIn: "the GitHub CLI isn't signed in"; signIn: "sign in"; unread: "unread"; reviews: "reviews"; mine: "my prs"; failed: "couldn't reach GitHub"; retry: "retry"; none: "nothing waiting" }
+    id { notSignedIn: "GitHub CLI belum masuk"; signIn: "masuk"; unread: "belum dibaca"; reviews: "review"; mine: "pr saya"; failed: "tidak bisa menghubungi GitHub"; retry: "coba lagi"; none: "tidak ada yang menunggu" }
+    es { notSignedIn: "la CLI de GitHub no tiene sesión iniciada"; signIn: "iniciar sesión"; unread: "sin leer"; reviews: "revisiones"; mine: "mis prs"; failed: "no se pudo conectar con GitHub"; retry: "reintentar"; none: "nada pendiente" }
+    pt { notSignedIn: "o GitHub CLI não está conectado"; signIn: "entrar"; unread: "não lidas"; reviews: "revisões"; mine: "meus prs"; failed: "não foi possível acessar o GitHub"; retry: "tentar de novo"; none: "nada pendente" }
+    de { notSignedIn: "die GitHub CLI ist nicht angemeldet"; signIn: "anmelden"; unread: "ungelesen"; reviews: "reviews"; mine: "meine prs"; failed: "GitHub nicht erreichbar"; retry: "erneut versuchen"; none: "nichts offen" }
+    zh { notSignedIn: "GitHub CLI 还没有登录"; signIn: "登录"; unread: "未读"; reviews: "待审查"; mine: "我的 pr"; failed: "无法连接 GitHub"; retry: "重试"; none: "没有待处理的" }
+  }
+  size: 6x4
+  minSize: 3x3
+
+  requires { pacman: ["github-cli", "jq"] }
+
+  // One GraphQL call for the pull requests, one small REST request for the
+  // notifications (its pagination link says how many are unread), run at the
+  // same time, so the tile fills in a few seconds after it loads.
+  source gh = cmd("""
+    gh auth status >/dev/null 2>&1 || { echo '{"auth": false}'; exit 0; }
+
+    tmp=$(mktemp -d) || exit 1
+    trap 'rm -rf "$tmp"' EXIT
+
+    # The pull requests and the notifications at the same time, so the tile fills in sooner.
+    gh api graphql -f query='
+      query {
+        viewer {
+          login
+          pullRequests(states: OPEN, first: 25, orderBy: {field: UPDATED_AT, direction: DESC}) {
+            totalCount
+            nodes { number title url updatedAt repository { name } }
+          }
+        }
+        reviews: search(query: "is:pr is:open review-requested:@me", type: ISSUE, first: 25) {
+          issueCount
+          nodes { ... on PullRequest { number title url updatedAt repository { name } } }
+        }
+      }' > "$tmp/prs.json" 2>/dev/null &
+    prs_pid=$!
+
+    # One small page of notifications; its pagination link says how many are unread.
+    resp=$(gh api -i "notifications?per_page=50" 2>/dev/null) || { wait "$prs_pid" 2>/dev/null; exit 1; }
+    resp=$(printf '%s' "$resp" | tr -d '\r')
+    printf '%s\n' "$resp" | sed '1,/^$/d' > "$tmp/notes.json"
+    last=$(printf '%s\n' "$resp" | sed -n 's/.*[?&]page=\([0-9][0-9]*\)>; rel="last".*/\1/p' | head -1)
+    if [ -n "$last" ]; then
+      unread=$(gh api -i "notifications?per_page=1" 2>/dev/null | tr -d '\r' | sed -n 's/.*[?&]page=\([0-9][0-9]*\)>; rel="last".*/\1/p' | head -1)
+      [ -n "$unread" ] || unread=50
+    else
+      unread=$(jq 'length' "$tmp/notes.json") || exit 1
+    fi
+
+    wait "$prs_pid" || exit 1
+
+    jq -nc --slurpfile p "$tmp/prs.json" --slurpfile n "$tmp/notes.json" --argjson u "$unread" '
+      {auth: true,
+       login: $p[0].data.viewer.login,
+       unread: $u,
+       reviews: $p[0].data.reviews.issueCount,
+       mineTotal: $p[0].data.viewer.pullRequests.totalCount,
+       mine: [$p[0].data.viewer.pullRequests.nodes[] | {number, title, url, updated: .updatedAt, repo: .repository.name}],
+       reviewList: [$p[0].data.reviews.nodes[] | {number, title, url, updated: .updatedAt, repo: .repository.name}],
+       notes: [$n[0][] | {title: .subject.title,
+                         url: ((.subject.url // "") | sub("https://api.github.com/repos/"; "https://github.com/") | sub("/pulls/"; "/pull/")),
+                         repo: .repository.name,
+                         reason: (.reason | gsub("_"; " ")),
+                         updated: .updated_at}]}'
+  """) every 5m json timeout 30s status
+
+  source now = clock every 1m
+
+  state tab = "notes"
+
+  let d = gh == null ? null : gh.out
+  // The tile's size: narrow stacks the counts, a short one leaves the pull requests out.
+  let narrow = (tileWidth ?? 999) < 200
+  let roomy = (tileHeight ?? 0) >= 200
+  let wide = (tileWidth ?? 0) >= 330
+
+  component Count(label, n, hot) {
+    Column {
+      gap: 0
+      Text { text: label; style: label; maxLines: 1 }
+      Text { text: "${n}"; style: title; color: (n ?? 0) > 0 ? hot : muted }
+    }
+  }
+
+  // The same, smaller, for a tile too short for the title style.
+  component TinyCount(label, n, hot) {
+    Column {
+      gap: 0
+      Text { text: label; fontSize: 10; color: muted; maxLines: 1 }
+      Text { text: "${n}"; fontSize: 20; bold: true; color: (n ?? 0) > 0 ? hot : muted }
+    }
+  }
+
+  // A tab in the screen: its number over its name, the open one highlighted.
+  component Tab(name, label, n) {
+    Box {
+      weight: 1
+      padding: [10, 8]
+      radius: 8
+      border: 1
+      borderColor: tab == name ? accent : alpha(foreground, 0.15)
+      background: tab == name ? alpha(accent, 0.12) : alpha(background, 0)
+      onTap: tab = name
+      Column {
+        gap: 2
+        align: center
+        Text { text: "${n ?? "…"}"; fontSize: 20; bold: true; align: center; color: tab == name ? accent : foreground }
+        Text { text: label; style: label; align: center; maxLines: 1 }
+      }
+    }
+  }
+
+  // A pull request in the tile: muted "#12 repo" and how long ago it moved, then its title.
+  component PrLine(repo, num, title, updated, href) {
+    Column {
+      gap: 1
+      onTap: url(href)
+      Row {
+        Text { text: "#${num} ${repo}"; fontSize: 11; color: muted; weight: 1; maxLines: 1 }
+        if wide {
+          Text { text: fmtAgo(parseTime(updated), now); fontSize: 10; color: muted }
+        }
+      }
+      Text { text: title; fontSize: 12; maxLines: 1 }
+    }
+  }
+
+  // An item in the screen: what it is in small text, then its title.
+  component Item(detail, title, updated, href) {
+    Row {
+      gap: 10
+      onTap: url(href)
+      Column {
+        weight: 1
+        gap: 2
+        Text { text: detail; fontSize: 12; color: muted; maxLines: 1 }
+        Text { text: title; fontSize: 15; maxLines: 2 }
+      }
+      Text { text: fmtAgo(parseTime(updated), now); fontSize: 12; color: muted }
+    }
+  }
+
+  onTap: url("https://github.com/notifications")
+
+  Column {
+    gap: 6
+    Text { text: "github"; style: muted }
+    if gh != null && gh.ok == false {
+      Text { text: str.failed; style: small }
+      Button { text: str.retry; onTap: refresh() }
+    } else if d == null {
+      Text { text: "…"; style: muted }
+    } else if d.auth == false {
+      Text { text: str.notSignedIn; style: small }
+      Button { text: str.signIn; onTap: terminal("gh auth login", "github") }
+    } else {
+      if narrow {
+        Row {
+          gap: 8
+          Box { weight: 1; onTap: { tab = "notes"; screen() }; TinyCount { label: str.unread; n: d.unread; hot: accent } }
+          Box { weight: 1; onTap: { tab = "reviews"; screen() }; TinyCount { label: str.reviews; n: d.reviews; hot: yellow } }
+        }
+      } else {
+        Row {
+          gap: 8
+          Box { weight: 1; onTap: { tab = "notes"; screen() }; Count { label: str.unread; n: d.unread; hot: accent } }
+          Box { weight: 1; onTap: { tab = "reviews"; screen() }; Count { label: str.reviews; n: d.reviews; hot: yellow } }
+        }
+      }
+      if roomy {
+        Column {
+          scroll: true
+          weight: 1
+          gap: 4
+          for p in d.mine key p.url {
+            PrLine { repo: replace(p.repo, "-" + (d.login ?? ""), ""); num: p.number; title: p.title; updated: p.updated; href: p.url }
+          }
+        }
+      }
+    }
+  }
+
+  screen {
+    title: "github"
+    Column {
+      padding: 16
+      gap: 12
+      Row {
+        gap: 8
+        Tab { name: "notes"; label: str.unread; n: d.unread }
+        Tab { name: "reviews"; label: str.reviews; n: d.reviews }
+        Tab { name: "mine"; label: str.mine; n: d.mineTotal }
+      }
+      Column {
+        scroll: true
+        weight: 1
+        gap: 12
+        if d == null {
+          Text { text: "…"; style: muted }
+        } else if tab == "notes" {
+          if len(d.notes) == 0 { Text { text: str.none; style: muted } }
+          for n in d.notes key n.url {
+            Item { detail: "${n.repo} · ${n.reason}"; title: n.title; updated: n.updated; href: n.url }
+          }
+        } else if tab == "reviews" {
+          if len(d.reviewList) == 0 { Text { text: str.none; style: muted } }
+          for r in d.reviewList key r.url {
+            Item { detail: "#${r.number} ${replace(r.repo, "-" + (d.login ?? ""), "")}"; title: r.title; updated: r.updated; href: r.url }
+          }
+        } else {
+          if len(d.mine) == 0 { Text { text: str.none; style: muted } }
+          for p in d.mine key p.url {
+            Item { detail: "#${p.number} ${replace(p.repo, "-" + (d.login ?? ""), "")}"; title: p.title; updated: p.updated; href: p.url }
+          }
+        }
+      }
+    }
+  }
+}

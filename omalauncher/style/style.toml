@@ -10,19 +10,22 @@ font = "Maple Mono NF"
 [home]
 recent-apps = false
 empty-page-left = false
-empty-page-right = false
 columns = 8
+single-page = true
 
 [widgets]
 opacity = 0.93
-frost = true
 border-width = 0
+
+[screens]
+gaps-out = 4
+border-width = 1
 
 [icons]
 monochrome = true
 
 [corners]
-scale = 0.5
+scale = 1
 
 [status-bar]
 shown = false

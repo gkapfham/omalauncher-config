@@ -2,7 +2,7 @@ panel "app drawer" {
   // The app drawer: swiping up on home opens it, above the prompt bar. It's a panel like any other, so it's yours to
   // change: ask your agent to edit it, or pick another panel in settings › gestures. .stock-drawer.owl next to it is
   // this file as the launcher ships it, kept up to date: compare the two to see what changed in a newer launcher.
-  meta { description: "The launcher's app drawer, written in owl: your apps in one column, renamed or grouped in folders, search as you type in the prompt bar, and a long-press menu that hides an app"; version: "1.4"; license: "MIT"; category: "system"; owl: 16 }
+  meta { description: "The launcher's app drawer, written in owl: your apps in one column, renamed or grouped in folders, search as you type in the prompt bar, and a long-press menu that hides an app"; version: "1.5"; license: "MIT"; category: "system"; owl: 16 }
   // The launcher's gear, as its settings buttons draw it; currentColor takes the accent.
   asset gear = base64"PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNMTkuMTQsMTIuOTRjMC4wNCwtMC4zIDAuMDYsLTAuNjEgMC4wNiwtMC45NGMwLC0wLjMyIC0wLjAyLC0wLjY0IC0wLjA3LC0wLjk0bDIuMDMsLTEuNThjMC4xOCwtMC4xNCAwLjIzLC0wLjQxIDAuMTIsLTAuNjFsLTEuOTIsLTMuMzJjLTAuMTIsLTAuMjIgLTAuMzcsLTAuMjkgLTAuNTksLTAuMjJsLTIuMzksMC45NmMtMC41LC0wLjM4IC0xLjAzLC0wLjcgLTEuNjIsLTAuOTRMMTQuNCwyLjgxYy0wLjA0LC0wLjI0IC0wLjI0LC0wLjQxIC0wLjQ4LC0wLjQxaC0zLjg0Yy0wLjI0LDAgLTAuNDMsMC4xNyAtMC40NywwLjQxTDkuMjUsNS4zNUM4LjY2LDUuNTkgOC4xMiw1LjkyIDcuNjMsNi4yOUw1LjI0LDUuMzNjLTAuMjIsLTAuMDggLTAuNDcsMCAtMC41OSwwLjIyTDIuNzQsOC44N0MyLjYyLDkuMDggMi42Niw5LjM0IDIuODYsOS40OGwyLjAzLDEuNThDNC44NCwxMS4zNiA0LjgsMTEuNjkgNC44LDEyczAuMDIsMC42NCAwLjA3LDAuOTRsLTIuMDMsMS41OGMtMC4xOCwwLjE0IC0wLjIzLDAuNDEgLTAuMTIsMC42MWwxLjkyLDMuMzJjMC4xMiwwLjIyIDAuMzcsMC4yOSAwLjU5LDAuMjJsMi4zOSwtMC45NmMwLjUsMC4zOCAxLjAzLDAuNyAxLjYyLDAuOTRsMC4zNiwyLjU0YzAuMDUsMC4yNCAwLjI0LDAuNDEgMC40OCwwLjQxaDMuODRjMC4yNCwwIDAuNDQsLTAuMTcgMC40NywtMC40MWwwLjM2LC0yLjU0YzAuNTksLTAuMjQgMS4xMywtMC41NiAxLjYyLC0wLjk0bDIuMzksMC45NmMwLjIyLDAuMDggMC40NywwIDAuNTksLTAuMjJsMS45MiwtMy4zMmMwLjEyLC0wLjIyIDAuMDcsLTAuNDcgLTAuMTIsLTAuNjFMMTkuMTQsMTIuOTR6TTEyLDE1LjZjLTEuOTgsMCAtMy42LC0xLjYyIC0zLjYsLTMuNnMxLjYyLC0zLjYgMy42LC0zLjZzMy42LDEuNjIgMy42LDMuNlMxMy45OCwxNS42IDEyLDE1LjZ6Ii8+PC9zdmc+"
   // What the drawer says, in the phone's language where it has a set, and in English where it doesn't. The action
@@ -16,6 +16,7 @@ panel "app drawer" {
       open: "open"; ask: "ask"; askInstallLinux: "ask an agent · install linux"; askInstallAgent: "ask an agent · install one"
       askAgent: (bin, text) => "ask ${bin}: ${text}"
       hide: "hide"; unhide: "unhide"; hiddenApps: "hidden apps"
+      grid: "grid"; list: "list"; az: "a–z"; used: "most used"; recent: "recent"
       icon: "icon"; ownIcon: "own icon"; initialsIcon: "initials"; typeIcon: "character or emoji…"; iconFile: "svg or png in this system…"; borrowIcon: "or another app's icon"; cancel: "cancel"
       rename: "rename"; addToFolder: "add to folder"; removeFromFolder: "remove from folder"; newFolder: "new folder…"; deleteFolder: "delete folder"
     }
@@ -27,6 +28,7 @@ panel "app drawer" {
       open: "buka"; ask: "tanya"; askInstallLinux: "tanya agen · instal linux"; askInstallAgent: "tanya agen · instal satu"
       askAgent: (bin, text) => "tanya ${bin}: ${text}"
       hide: "sembunyikan"; unhide: "tampilkan lagi"; hiddenApps: "aplikasi tersembunyi"
+      grid: "kisi"; list: "daftar"; az: "a–z"; used: "paling sering"; recent: "terbaru"
       icon: "ikon"; ownIcon: "ikon sendiri"; initialsIcon: "inisial"; typeIcon: "karakter atau emoji…"; iconFile: "svg atau png di sistem ini…"; borrowIcon: "atau ikon aplikasi lain"; cancel: "batal"
       rename: "ganti nama"; addToFolder: "tambah ke folder"; removeFromFolder: "hapus dari folder"; newFolder: "folder baru…"; deleteFolder: "hapus folder"
     }
@@ -38,6 +40,7 @@ panel "app drawer" {
       open: "abrir"; ask: "preguntar"; askInstallLinux: "preguntar a un agente · instalar linux"; askInstallAgent: "preguntar a un agente · instalar uno"
       askAgent: (bin, text) => "preguntar a ${bin}: ${text}"
       hide: "ocultar"; unhide: "mostrar"; hiddenApps: "apps ocultas"
+      grid: "cuadrícula"; list: "lista"; az: "a–z"; used: "más usadas"; recent: "recientes"
       icon: "icono"; ownIcon: "icono propio"; initialsIcon: "iniciales"; typeIcon: "carácter o emoji…"; iconFile: "svg o png en este sistema…"; borrowIcon: "o el icono de otra app"; cancel: "cancelar"
       rename: "renombrar"; addToFolder: "añadir a carpeta"; removeFromFolder: "quitar de la carpeta"; newFolder: "carpeta nueva…"; deleteFolder: "eliminar carpeta"
     }
@@ -49,6 +52,7 @@ panel "app drawer" {
       open: "abrir"; ask: "perguntar"; askInstallLinux: "perguntar a um agente · instalar linux"; askInstallAgent: "perguntar a um agente · instalar um"
       askAgent: (bin, text) => "perguntar ao ${bin}: ${text}"
       hide: "ocultar"; unhide: "mostrar"; hiddenApps: "apps ocultos"
+      grid: "grade"; list: "lista"; az: "a–z"; used: "mais usados"; recent: "recentes"
       icon: "ícone"; ownIcon: "ícone próprio"; initialsIcon: "iniciais"; typeIcon: "caractere ou emoji…"; iconFile: "svg ou png neste sistema…"; borrowIcon: "ou o ícone de outro app"; cancel: "cancelar"
       rename: "renomear"; addToFolder: "adicionar à pasta"; removeFromFolder: "remover da pasta"; newFolder: "nova pasta…"; deleteFolder: "excluir pasta"
     }
@@ -60,6 +64,7 @@ panel "app drawer" {
       open: "öffnen"; ask: "fragen"; askInstallLinux: "einen agenten fragen · linux installieren"; askInstallAgent: "einen agenten fragen · einen installieren"
       askAgent: (bin, text) => "${bin} fragen: ${text}"
       hide: "ausblenden"; unhide: "einblenden"; hiddenApps: "ausgeblendete apps"
+      grid: "raster"; list: "liste"; az: "a–z"; used: "meistgenutzt"; recent: "zuletzt"
       icon: "symbol"; ownIcon: "eigenes symbol"; initialsIcon: "initialen"; typeIcon: "zeichen oder emoji…"; iconFile: "svg oder png in diesem system…"; borrowIcon: "oder das symbol einer anderen app"; cancel: "abbrechen"
       rename: "umbenennen"; addToFolder: "zu ordner hinzufügen"; removeFromFolder: "aus ordner entfernen"; newFolder: "neuer ordner…"; deleteFolder: "ordner löschen"
     }
@@ -71,6 +76,7 @@ panel "app drawer" {
       open: "打开"; ask: "提问"; askInstallLinux: "问智能体 · 安装 linux"; askInstallAgent: "问智能体 · 先装一个"
       askAgent: (bin, text) => "问 ${bin}：${text}"
       hide: "隐藏"; unhide: "取消隐藏"; hiddenApps: "已隐藏的应用"
+      grid: "网格"; list: "列表"; az: "a–z"; used: "最常用"; recent: "最近"
       icon: "图标"; ownIcon: "应用自带图标"; initialsIcon: "首字母"; typeIcon: "字符或表情…"; iconFile: "本机的 svg 或 png…"; borrowIcon: "或其他应用的图标"; cancel: "取消"
       rename: "重命名"; addToFolder: "添加到文件夹"; removeFromFolder: "从文件夹移除"; newFolder: "新建文件夹…"; deleteFolder: "删除文件夹"
     }
@@ -79,11 +85,25 @@ panel "app drawer" {
   source ag = android.agents
   // What home's recent strip above the bar shows, the apps opened last first; the drawer shows it at the top too.
   source rec = android.recent
+  // Home's pages, left to right, as owl-pages lists them: a face's, or a page of tiles', with the number the
+  // launcher knows it by, for the strip at the bottom of the drawer.
+  source pg = cmd("owl-pages") json
+  let pages = pg ?? []
   // The app whose long-press menu is open, by key, and the shortcuts it offers: null while they load, and the menu
   // waits for them, so it opens whole rather than growing.
   state menu = ""
   state menuShortcuts = null
   state tab = "personal"
+  // How the list lays its apps out and orders them: one column with the name beside the icon, or a grid with it under,
+  // and a–z, the ones opened most first, or the ones opened last first.
+  state view = "list" persist
+  state sorting = "az" persist
+  // What's picked on the rail down the list's right edge: "*" for every app, else the letter the list is narrowed to.
+  state railPick = "*"
+  // The sections folded shut, by section id: their title stays, their apps wait behind it.
+  state collapsed = {} persist
+  // Whether the sort pill's menu of orders is open.
+  state sortMenu = false
   // The apps hidden from the list and search, by key; long-press › hide adds one, the hidden section unhides it.
   state hidden = {} persist
   // The apps renamed in the drawer, by key; long-press › rename sets one, an empty name brings the app's own back.
@@ -103,8 +123,8 @@ panel "app drawer" {
   // The result picked with the arrow or Tab keys, -1 for the ask row; null follows the ranking.
   state pick = null
 
-  // One app a row: a single-column list, the name beside the icon.
-  let cols = 1
+  // One app a row in the list, four in the grid; the bar's results follow the same columns.
+  let cols = view == "grid" ? 4 : 1
   let typed = trim(query)
   let searching = typed != ""
   // The app the icon picker is for, and the apps whose icons it offers, filtered by what's typed in the bar.
@@ -119,13 +139,21 @@ panel "app drawer" {
   // an app in a folder leaves the list for its folder's section.
   let mineAll = renamedAll.filter(a => (tab == "work") == (a.profile == "work"))
   let foldered = flatten(keys(folders).map(f => get(folders, f, [])))
-  let mine = mineAll.filter(a => !get(hidden, a.key, false) && !any(foldered, k => k == a.key))
+  // The rail's pick as the list reads it: no letter while "*" is picked.
+  let letter = railPick == "*" ? "" : railPick
+  // A letter picked on the rail narrows the list to the apps starting with it.
+  let listed = mineAll.filter(a => !get(hidden, a.key, false) && !any(foldered, k => k == a.key) && (letter == "" || startsWith(lower(a.name), lower(letter))))
+  // a–z as the launcher hands them over, or the ones opened most or last first; a folder keeps the order it was given.
+  let mine = sorting == "used" ? listed.sortBy(a => -(a.score ?? 0)) : sorting == "recent" ? listed.sortBy(a => -(a.last ?? 0)) : listed
   let hiddenApps = mineAll.filter(a => get(hidden, a.key, false))
+  // The first letters the list has, for the rail down its right edge, under "*" for all of them.
+  let initials = unique(mineAll.filter(a => !get(hidden, a.key, false)).map(a => upper(sub(a.name, 0, 1)))).filter(l => l != "")
+  let rail = flatten([["*"], initials])
   // The apps opened last, as a strip above the list, like home's above the bar: icons only, as home's are, since a
   // cell here is too narrow for a name. One hidden from the drawer stays out of it too.
   let recent = take(rec ?? [], 8).filter(a => !get(hidden, a.key, false))
   // Each folder a section of its apps, ahead of the others; one whose apps are all hidden or gone waits.
-  let folderSections = keys(folders).map(f => {id: "folder:" + f, title: f, folder: f, apps: get(folders, f, []).map(k => find(mineAll, a => a.key == k)).filter(a => a != null && !get(hidden, a.key, false))}).filter(s => len(s.apps) > 0)
+  let folderSections = keys(folders).map(f => {id: "folder:" + f, title: f, folder: f, apps: get(folders, f, []).map(k => find(mineAll, a => a.key == k)).filter(a => a != null && !get(hidden, a.key, false) && (letter == "" || startsWith(lower(a.name), lower(letter))))}).filter(s => len(s.apps) > 0)
   // Each section's id keys its rows; its title is the one shown.
   let baseSections = tab == "work" ? [
       {id: "shortcuts", title: str.shortcuts, apps: mine.filter(a => a.kind == "shortcut")},
@@ -139,10 +167,11 @@ panel "app drawer" {
       {id: "hidden", title: str.hiddenApps, apps: hiddenApps, hiding: true}
     ]
   let sections = flatten([folderSections, baseSections])
-  // A title, then rows of cols apps. Without Linux, its section is an offer to install it.
+  // A title, then rows of cols apps, unless the title was folded: then the title alone, with how many it holds.
+  // Without Linux, its section is an offer to install it.
   let rows = flatten(sections.filter(s => len(s.apps) > 0 || s.work || (s.linux && !linux)).map(s => flatten([
-      [{key: "h:" + s.id, title: s.linux && !linux ? str.linuxApps : s.title, work: s.work, offer: s.linux && !linux, folder: s.folder ?? ""}],
-      chunk(s.apps, cols).map((cells, r) => {key: s.id + ":" + r, cells: cells, hiding: s.hiding == true, folder: s.folder ?? ""})
+      [{key: "h:" + s.id, id: s.id, title: s.linux && !linux ? str.linuxApps : s.title, work: s.work, offer: s.linux && !linux, folder: s.folder ?? "", count: len(s.apps)}],
+      get(collapsed, s.id, false) ? [] : chunk(s.apps, cols).map((cells, r) => {key: s.id + ":" + r, cells: cells, hiding: s.hiding == true, folder: s.folder ?? ""})
     ])))
   // Every profile's apps match while typing, best first; the list runs up from the bar, so the best sits right above it.
   let hits = searching ? rank(renamedAll.filter(a => !get(hidden, a.key, false)), typed) : []
@@ -159,8 +188,8 @@ panel "app drawer" {
     }
   }
 
-  // Typing starts the pick over, at the best match.
-  on typed { pick = null }
+  // Typing starts the pick over, at the best match, and drops the rail's letter: the bar searches them all.
+  on typed { pick = null; railPick = "*" }
 
   // How much the drawer covers home: near-opaque, as home's widgets showing through make the icons hard to read.
   opacity: 0.97
@@ -209,12 +238,8 @@ panel "app drawer" {
 
   // One app a row: its icon, then its name beside it. A long press opens its menu: rename, folder, hide among it.
   component Cell(a, picked, hiding, folder) {
-    Row {
+    Box {
       weight: 1
-      fill: width
-      align: center
-      gap: 14
-      padding: [6, 14]
       radius: 16 * corners
       border: picked ? 2 : 0
       borderColor: accent
@@ -227,8 +252,26 @@ panel "app drawer" {
         menu = a.key
         menuShortcuts = shortcuts(a.key)
       }
-      AppIcon { a: a; given: get(icons, a.key, null) }
-      Text { text: a.name; fontSize: 15; maxLines: 1; weight: 1 }
+      // The grid's cell: the icon over the name, centered, as a stock launcher draws an app.
+      if view == "grid" {
+        Column {
+          fill: width
+          align: center
+          gap: 6
+          padding: [10, 4]
+          AppIcon { a: a; given: get(icons, a.key, null) }
+          Text { text: a.name; fontSize: 12; maxLines: 1; minLines: 1; align: center }
+        }
+      } else {
+        Row {
+          fill: width
+          align: center
+          gap: 14
+          padding: [6, 14]
+          AppIcon { a: a; given: get(icons, a.key, null) }
+          Text { text: a.name; fontSize: 15; maxLines: 1; weight: 1 }
+        }
+      }
       Popup {
         visible: menu == a.key && menuShortcuts != null
         position: above
@@ -345,12 +388,51 @@ panel "app drawer" {
     Row {
       align: center
       padding: [0, 12, 0, 8]
-      gap: 0
+      gap: 8
       // Typing searches every profile, so the tabs step aside.
       for t in d.work != null && !searching ? ["personal", "work"] : [] {
-        Text { text: get(str, t); color: tab == t ? accent : muted; background: tab == t ? surface : transparent; radius: 18 * corners; padding: [14, 10]; onTap: tab = t }
+        Text { text: get(str, t); color: tab == t ? accent : muted; background: tab == t ? surface : transparent; radius: 18 * corners; padding: [14, 10]; onTap: { tab = t; railPick = "*" } }
       }
       Spacer { weight: 1 }
+      // How the list is ordered: a–z, the ones opened most first, or the ones opened last first. A pill on the
+      // surface, as the tabs are, so it reads as something to press; it opens its three choices. Search keeps the
+      // bar's own ranking, so it steps aside while typing.
+      Row {
+        visible: !searching
+        background: surface
+        radius: 18 * corners
+        align: center
+        padding: [12, 10]
+        onTap: { haptic(); sortMenu = !sortMenu }
+        Text { text: (sorting == "used" ? str.used : sorting == "recent" ? str.recent : str.az) + " ▾"; color: muted }
+        Popup {
+          visible: sortMenu
+          position: below
+          onDismiss: sortMenu = false
+          width: 170
+          gap: 0
+          for o in ["az", "used", "recent"] key o {
+            Row {
+              fill: width
+              align: center
+              gap: 8
+              padding: [12, 12]
+              onTap: { sorting = o; sortMenu = false }
+              Text { text: get(str, o); color: sorting == o ? accent : foreground; weight: 1 }
+              Text { text: "✓"; visible: sorting == o; color: accent }
+            }
+          }
+        }
+      }
+      // One app a row, or a grid of four with the name under the icon; the bar's results follow it too. A pill too.
+      Row {
+        background: surface
+        radius: 18 * corners
+        align: center
+        padding: [12, 10]
+        onTap: { haptic(); view = view == "grid" ? "list" : "grid" }
+        Text { text: view == "grid" ? str.grid : str.list; color: muted }
+      }
       Box {
         size: 44
         radius: 22 * corners
@@ -362,76 +444,122 @@ panel "app drawer" {
         Box { visible: d.updates > 0; align: topEnd; size: 44; padding: 8; Box { size: 8; radius: 4; background: red } }
       }
     }
-    Column {
+    Row {
       visible: !searching && iconPicking == ""
-      lazy: true
       weight: 1
       fill: width
       gap: 0
-      // The apps opened last, above the list, as on home: a tap opens one and leaves the drawer.
-      Row {
-        visible: len(recent) > 0
-        fill: width
-        gap: 6
-        padding: [2, 4, 2, 8]
-        align: center
-        for a in recent key a.key {
-          Box {
-            weight: 1
-            align: center
-            onTap: { haptic(); open(a.key) }
-            Image { src: a.icon; size: 34; fit: contain; label: a.name }
-          }
-        }
-      }
-      for row in rows key row.key {
-        if row.title != null {
-          // A section's title, with the work switch or the offer to install Linux at its end.
-          Row {
-            fill: width
-            gap: 0
-            align: center
-            padding: [8, 12, 0, 4]
-            Text {
-              text: row.title
-              color: muted
+      align: top
+      Column {
+        lazy: true
+        weight: 1
+        gap: 0
+        // The apps opened last, above the list, as on home: a tap opens one and leaves the drawer.
+        Row {
+          visible: len(recent) > 0 && letter == ""
+          fill: width
+          gap: 6
+          padding: [2, 4, 2, 8]
+          align: center
+          for a in recent key a.key {
+            Box {
               weight: 1
-              // A folder's title opens its menu on a long press: deleting it brings its apps back to the list.
-              onLongPress: {
-                if row.folder != "" {
-                  haptic()
-                  folderMenu = row.folder
-                }
-              }
+              align: center
+              onTap: { haptic(); open(a.key) }
+              Image { src: a.icon; size: 34; fit: contain; label: a.name }
             }
-            Popup {
-              visible: folderMenu == row.folder && row.folder != ""
-              onDismiss: folderMenu = ""
-              width: 200
-              Text {
-                text: str.deleteFolder
-                fontSize: 15
-                fill: width
-                padding: [12, 12]
-                onTap: {
-                  folders = remove(folders, folderMenu)
-                  folderMenu = ""
-                }
-              }
-            }
-            Text { text: "[" + (d.work.paused ? str.turnOn : str.pause) + "]"; visible: row.work == true; color: accent; onTap: workApps("toggle") }
-            Text { text: "[" + (d.linux == "installing" ? str.installing : str.installLinux) + "]"; visible: row.offer == true; color: accent; onTap: launcher("linux") }
           }
-        } else {
-          Row {
-            fill: width
-            gap: 0
-            for a in row.cells { Cell { a: a; picked: false; hiding: row.hiding; folder: row.folder ?? "" } }
-            // A short last row keeps its cells the width of the others'.
-            for s in range(0, cols - len(row.cells)) { Spacer { weight: 1 } }
+        }
+        for row in rows key row.key {
+          if row.title != null {
+            // A section's title, with the work switch or the offer to install Linux at its end. The chevron says
+            // whether it's folded: a tap on the title folds it or opens it again.
+            Row {
+              fill: width
+              gap: 0
+              align: center
+              padding: [8, 12, 0, 4]
+              Text { text: get(collapsed, row.id, false) ? "▸" : "▾"; color: muted; fontSize: 11; padding: [0, 6, 0, 0] }
+              Text {
+                // Folded, the title says how many apps wait behind it.
+                text: get(collapsed, row.id, false) ? row.title + " · ${row.count}" : row.title
+                color: muted
+                weight: 1
+                onTap: {
+                  haptic()
+                  collapsed = get(collapsed, row.id, false) ? remove(collapsed, row.id) : set(collapsed, row.id, true)
+                }
+                // A folder's title opens its menu on a long press: deleting it brings its apps back to the list.
+                onLongPress: {
+                  if row.folder != "" {
+                    haptic()
+                    folderMenu = row.folder
+                  }
+                }
+              }
+              Popup {
+                visible: folderMenu == row.folder && row.folder != ""
+                onDismiss: folderMenu = ""
+                width: 200
+                Text {
+                  text: str.deleteFolder
+                  fontSize: 15
+                  fill: width
+                  padding: [12, 12]
+                  onTap: {
+                    folders = remove(folders, folderMenu)
+                    folderMenu = ""
+                  }
+                }
+              }
+              Text { text: "[" + (d.work.paused ? str.turnOn : str.pause) + "]"; visible: row.work == true; color: accent; onTap: workApps("toggle") }
+              Text { text: "[" + (d.linux == "installing" ? str.installing : str.installLinux) + "]"; visible: row.offer == true; color: accent; onTap: launcher("linux") }
+            }
+          } else {
+            Row {
+              fill: width
+              gap: 0
+              for a in row.cells { Cell { a: a; picked: false; hiding: row.hiding; folder: row.folder ?? "" } }
+              // A short last row keeps its cells the width of the others'.
+              for s in range(0, cols - len(row.cells)) { Spacer { weight: 1 } }
+            }
           }
         }
       }
+      // The rail down the list's right edge: "*" for every app, then each first letter the list has, one cell each
+      // down a fixed 560 dp so a finger anywhere on it lands on a cell, and a drag's y says which: the cells share
+      // the height, so y * how many / 560 is the one under it. A tap narrows the list to that letter, and a tap on it
+      // again (or on "*") brings every app back.
+      Column {
+        visible: len(rail) > 2
+        width: 34
+        height: 560
+        gap: 0
+        align: center
+        background: alpha(surface, 0.5)
+        radius: 17 * corners
+        drag: vertical
+        // A tick each time the finger crosses into another letter, not on every move.
+        onDrag: {
+          let next = rail[clamp(int(floor(y * len(rail) / 560)), 0, len(rail) - 1)]
+          if next != railPick {
+            haptic()
+            railPick = next
+          }
+        }
+        for l in rail key l {
+          Row {
+            weight: 1
+            fill: width
+            align: center
+            justify: center
+            onTap: { haptic(); railPick = railPick == l ? "*" : l }
+            Text { text: l; fontSize: 12; color: railPick == l ? accent : muted }
+          }
+        }
+      }
+      // A little air between the rail and the screen's edge.
+      Spacer { width: 6 }
     }
     // Picking an app's icon: its own or its initials, a character or a file, or another app's icon.
     Column {
@@ -519,6 +647,26 @@ panel "app drawer" {
           gap: 0
           for a, i in row.cells { Cell { a: a; picked: row.start + i == chosen; hiding: false; folder: "" } }
           for s in range(0, cols - len(row.cells)) { Spacer { weight: 1 } }
+        }
+      }
+    }
+    // Home's pages as a strip above the bar: a tap turns home to one, as Super+1…9 does, and the drawer goes with it.
+    // The numbers are the launcher's: 0 is the face left of page 1, then 1, 2, 3… for the pages of tiles after it.
+    Flow {
+      visible: !searching && iconPicking == "" && len(pages) > 1
+      fill: width
+      gap: 5
+      padding: [5, 8, 12, 2]
+      for p in pages key p.key {
+        Text {
+          text: p.label
+          fontSize: 10
+          color: muted
+          background: surface
+          radius: 13 * corners
+          padding: [8, 5]
+          maxLines: 1
+          onTap: { haptic(); launcher("page:${p.n}") }
         }
       }
     }

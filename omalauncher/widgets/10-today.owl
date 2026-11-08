@@ -443,8 +443,8 @@ widget "today" {
       Row {
         gap: 6
         align: bottom
-        Text { text: get(night ? nightIcons : dayIcons, "${int(code)}", ""); font: icon; fontSize: 32; color: sky; width: 26; padding: [0, 0, 0, 3] }
-        Text { text: "${round(num(cur.temperature_2m))}°"; fontSize: 28; color: cyan; width: 68; maxLines: 1 }
+        Text { text: get(night ? nightIcons : dayIcons, "${int(code)}", ""); font: icon; fontSize: 26; color: sky; width: 22; padding: [0, 0, 0, 2] }
+        Text { text: "${round(num(cur.temperature_2m))}°"; fontSize: 22; color: cyan; width: 56; maxLines: 1 }
         if !narrow {
           Column {
             gap: 0

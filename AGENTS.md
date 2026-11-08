@@ -11,3 +11,12 @@ The launcher's look (theme, background, tile spacing and borders, corners, the s
 Where everything on home is (pages in order, faces, widgets, pinned apps and folders, each tile's cell) is ~/.config/omalauncher/home/layout.toml; edit it to move, resize or pin things or reorder pages. docs/home.md in the widgets folder explains it.
 
 The phone's approximate location, its calendar and the AirPods connected to it are `phone location`, `phone calendar [days]` and `phone airpods` (JSON; `phone --help` says more), where the launcher was allowed them.
+
+## DEV LOGS
+
+Log important development progress for this project with `~/.local/bin/oma-devlogs` (write entries from the project directory). pi and Codex read these rules here; Claude Code reads CLAUDE.md beside this file, which carries the same rules.
+
+- Log important features, implemented changes or fixes, meaningful verification results, and issues that need follow-up. Combine related work into one entry; do not log every reply.
+- Keep each entry to 1–3 concise sentences: key changes, actual verification results, and unresolved issues only when relevant. Say when something is unverified; never present plans or assumptions as completed work.
+- Skip general Q&A, research, suggestions, trivial edits, routine checks, duplicates, and log maintenance. Exclude secrets and personal data.
+- Write entries as `~/.local/bin/oma-devlogs log --project 'omalauncher' 'summary'`, with correct shell quoting. Use the repository or folder name and keep it the same every time; do not repeat it in the summary. Only claim it was recorded after the command succeeds. Check that the command is available and tell the user if writing fails. Do not log this setup or create sample entries.
