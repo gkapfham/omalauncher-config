@@ -15,6 +15,7 @@ single-page = true
 
 [widgets]
 opacity = 0.93
+frost = true
 border-width = 0
 
 [screens]

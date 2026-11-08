@@ -2,7 +2,7 @@ widget "agenda" {
   size: 9x6
   minSize: 3x3
   requires { pacman: ["python", "nodejs"] }
-  padding: 12
+  padding: 8
 
   meta {
     owl: 17
@@ -36,13 +36,22 @@ widget "agenda" {
   let staleNote = since == null ? "can't reach Google — showing what I last had" : "can't reach Google — showing the last update, ${since}"
   let events = raw.events ?? []
   let cals = raw.cals ?? []
-  // What fits: 12 of padding top and bottom, the heading row 18, a day heading 22, an event row 23, and
+  // What fits: 8 of padding top and bottom, the heading row 18, a day heading 22, an event row 23, and
   // 16 for the "+N more" line when there are more events than fit. The tile can be any size.
-  let inner = (tileHeight ?? 460) - 24 - 18
+  let inner = (tileHeight ?? 460) - 16 - 18
   let heights = scan(events, (h, e, i) => h + (i == 0 || events[i - 1].day != e.day ? 22 : 0) + 23, 0)
   let fits = len(heights.filter(h => h <= inner))
   let rows = clamp(fits < len(events) ? len(heights.filter(h => h <= inner - 16)) : fits, 1, 50)
   let shown = events.take(rows)
+  let rest = len(events) - len(shown)
+  // The line under the list, when it's cut: what comes next. The day that starts next and how much is on it,
+  // or, when the next event is later the same day, that event. It shares the 16 reserved for the "+N more"
+  // line, so no room is left empty, whatever size the tile is.
+  let nextDay = rest > 0 ? (shown[rows - 1].day == events[rows].day ? null : events[rows].day) : null
+  let nextDayCount = nextDay == null ? 0 : len(events.filter(e => e.day == nextDay))
+  let nextDayAt = nextDay == null ? now : events[rows].s
+  let nextAt = rest > 0 && nextDay == null ? events[rows] : null
+  let footer = nextDay != null ? "${upper(fmtTime(nextDayAt, "EEE d MMM"))} · ${nextDayCount} ${nextDayCount == 1 ? "event" : "events"}" : nextAt == null ? null : "next ${nextAt.all ? "all day" : nextAt.time} ${nextAt.t}"
 
   // One event: the calendar's colour, its time, its name. Past ones, still listed today, dimmed.
   component Event(e) {
@@ -101,14 +110,36 @@ widget "agenda" {
     } else if len(events) == 0 {
       Text { text: "nothing in the calendar"; style: small; color: muted }
     } else {
-      for e, i in shown key e.s + e.t {
-        if i == 0 || shown[i - 1].day != e.day {
-          DayHeading { day: e.day; at: e.s }
+      // The list stops short of the tile's bottom by less than a row. Taking the leftover here pushes the line
+      // under it to the bottom, so the gap below "+N more" matches the one above "agenda"; a tile too short for
+      // both leaves the list as it was.
+      Column {
+        weight: 1
+        gap: 2
+        for e, i in shown key e.s + e.t {
+          if i == 0 || shown[i - 1].day != e.day {
+            DayHeading { day: e.day; at: e.s }
+          }
+          Event { e: e }
         }
-        Event { e: e }
       }
-      if len(events) > len(shown) {
-        Text { text: "+${len(events) - len(shown)} more"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+      if rest > 0 {
+        Row {
+          height: 16
+          align: bottom
+          padding: [0, 0, 0, 3]
+          gap: 8
+          Text {
+            text: footer
+            font: mono
+            fontSize: 10
+            color: nextDay != null ? accent : muted
+            weight: 1
+            maxLines: 1
+            letterSpacing: nextDay != null ? 1 : 0
+          }
+          Text { text: "+${rest} more"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+        }
       }
     }
   }

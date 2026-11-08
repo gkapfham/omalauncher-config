@@ -27,6 +27,15 @@ widget "backup" {
   state viewing = ""
 
   let busy = st != null && (st.state == "saving" || st.state == "restoring")
+  // A run that dies (the app frozen, the phone shut down) leaves "saving" behind,
+  // and the status only ever changes when the run itself changes it. After this
+  // long no run is doing anything any more, so the tile stops saying it is and
+  // lets a new one start. owl-config clears the same status at its next command.
+  let age = st == null || st.at == null ? 0 : now - st.at
+  let staleAfter = st != null && st.state == "restoring" ? 1800 : 600
+  let stalled = busy && age > staleAfter
+  let working = busy && !stalled
+  let stateText = st == null ? "ready" : stalled ? "interrupted" : st.state
   let stateColor = st == null ? muted : st.state == "error" ? red : st.state == "ok" ? green : yellow
   let last = len(bl ?? []) > 0 ? bl[0] : null
   let inside = cs != null && cs.id == viewing ? cs : null
@@ -34,9 +43,16 @@ widget "backup" {
   let kept = len(saved)
   let bytesKept = sum(saved.map(b => b.size ?? 0))
   let when = last == null ? "" : fmtAgo(last.at, now)
+  let note = st == null ? "no backup has run from here yet"
+    : stalled ? "the last " + (st.state == "restoring" ? "restore" : "backup") + " stopped before it finished; that status isn't live any more"
+    : st.message
   // The tile shows as much as it has room for, so it keeps working when it's resized.
+  let roomy = (tileHeight ?? 0) >= 230
   let tall = (tileHeight ?? 0) >= 175
   let earlierFit = clamp(floor(((tileHeight ?? 0) - 175) / 28), 0, 6)
+  // Trouble gets the line "when · size" would take, so nothing is squeezed out.
+  let trouble = st != null && (st.state == "error" || stalled)
+  let troubleText = stalled ? "the last run stopped early — tap back up" : st.message
 
   // First open with no cached list (a new install): fetch it once.
   on bl first {
@@ -55,7 +71,7 @@ widget "backup" {
     gap: 3
     Row {
       Text { text: "backup"; style: muted; weight: 1 }
-      Text { text: st == null ? "ready" : st.state; style: small; color: stateColor }
+      Text { text: stateText; style: small; color: stateColor }
     }
     if last != null {
       Row {
@@ -73,10 +89,10 @@ widget "backup" {
     } else {
       Text { text: "no backups yet"; style: small; color: muted }
     }
-    if st != null && st.state == "error" {
-      Text { text: st.message; style: small; color: red; maxLines: 2 }
+    if trouble {
+      Text { text: troubleText; style: small; color: stateColor; maxLines: 2 }
     }
-    if tall && kept > 0 {
+    if roomy && kept > 0 {
       Text { text: "${kept} saved · " + fmtBytes(bytesKept); style: small; color: muted; maxLines: 1 }
     }
     if tall && earlierFit > 0 && kept > 1 {
@@ -93,10 +109,10 @@ widget "backup" {
     }
     Spacer { weight: 1 }
     Button {
-      text: busy ? "working…" : "back up"
-      color: busy ? muted : accent
+      text: working ? "working…" : "back up"
+      color: working ? muted : accent
       onTap: {
-        if !busy {
+        if !working {
           run("setsid -f $HOME/.local/bin/owl-config save >/dev/null 2>&1 </dev/null")
         }
       }
@@ -114,11 +130,11 @@ widget "backup" {
         Row {
           gap: 8
           Button {
-            text: busy ? (st.state == "saving" ? "backing up…" : "restoring…") : "back up now"
-            color: busy ? muted : accent
+            text: working ? (st.state == "saving" ? "backing up…" : "restoring…") : "back up now"
+            color: working ? muted : accent
             weight: 1
             onTap: {
-              if !busy {
+              if !working {
                 run("setsid -f $HOME/.local/bin/owl-config save >/dev/null 2>&1 </dev/null")
               }
             }
@@ -139,12 +155,12 @@ widget "backup" {
           Row {
             align: center
             gap: 8
-            Text { text: st == null ? "ready" : st.state; color: stateColor; weight: 1 }
-            if st != null {
-              Text { text: fmtAgo(st.at, now); style: small; color: muted }
+            Text { text: stateText; color: stateColor; weight: 1 }
+            if st != null && st.at != null {
+              Text { text: fmtAgo(st.at, now) == "now" ? "just now" : fmtAgo(st.at, now) + " ago"; style: small; color: muted }
             }
           }
-          Text { text: st == null ? "no backup has run from here yet" : st.message; style: small; color: muted; maxLines: 3 }
+          Text { text: note; style: small; color: muted; maxLines: 3 }
           if st != null && st.link != null {
             Text { text: "open in Drive"; color: accent; style: small; onTap: url(st.link) }
           }

@@ -66,9 +66,47 @@ def write_json(path, data):
 
 
 def write_status(state, message, **extra):
-    data = {"state": state, "message": message, "at": int(time.time())}
+    data = {"state": state, "message": message, "at": int(time.time()), "pid": os.getpid()}
     data.update({key: value for key, value in extra.items() if value is not None})
     write_json(STATUS, data)
+
+
+BUSY_STATES = ("saving", "restoring")
+
+
+def run_is_alive(pid):
+    """Whether the run that wrote the status is still going."""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def reconcile():
+    """Clear a 'saving'/'restoring' left behind by a run that died.
+
+    A frozen app, a reboot or a killed process leaves the status saying the run
+    is still going, and the widgets show it as working with their buttons
+    disabled for ever. The pid in the status says whether that run is still
+    there; if it isn't, the run stopped and nothing is going to clear it.
+    """
+    try:
+        data = json.loads(STATUS.read_text())
+    except Exception:  # noqa: BLE001 - no status, or half of one, is no status
+        return
+    if data.get("state") not in BUSY_STATES or run_is_alive(data.get("pid")):
+        return
+    verb = "restore" if data["state"] == "restoring" else "backup"
+    message = (
+        "the last restore stopped before it finished; the setup from before it is "
+        "under ~/.local/share/omalauncher-restored"
+        if verb == "restore"
+        else "the last backup stopped before it reported back"
+    )
+    write_status("error", message)
 
 
 def log(*parts):
@@ -669,6 +707,7 @@ def undo():
 
 def main():
     ensure_cache()
+    reconcile()
     command = sys.argv[1] if len(sys.argv) > 1 else "status"
 
     if command == "status":
