@@ -15,7 +15,7 @@ widget "papers" {
 
   meta {
     owl: 17
-    description: "What's new on arXiv in software testing: flaky tests, test generation, program repair, LLM agents, and cs.SE's newest testing work. The list scrolls, refresh or load 20 more, tap a paper to read it, the tile for the whole list and its filters"
+    description: "What's new on arXiv in software testing: flaky tests, test generation, program repair, LLM agents, and cs.SE's newest testing work. The searches are keywords you keep on the phone (searches ⚙ on the tile) and become the list's filter chips; the list scrolls, refresh or load 20 more, and a tap on a paper reads it"
     version: "1.0"
     license: "MIT"
     category: "news"
@@ -54,6 +54,9 @@ widget "papers" {
   // Taps on "add", "replace" or the keyboard's send, counted up: the trigger below does the saving, so the field and
   // the button save the same way.
   state save = 0
+  // The searches the editor last wrote, kept until the file is read back with them: a save a moment after another
+  // builds on these, not on a file read that hasn't caught up. It lets go as soon as the file changes.
+  state wrote = null
   // Text the searches view wants in the queries file: the trigger below writes it, so a tap only says what it holds.
   state pending = null
   // What writing it printed, which says it went wrong when it's empty, and reset's first tap: it asks before the second.
@@ -82,21 +85,25 @@ widget "papers" {
   // it as it is, and the output differs on each save, so a second save of the same searches runs too.
   on pending {
     if value != null {
-      saved = run("mkdir -p $HOME/.config/owl-papers && printf '%s' " + sh(value) + " > $HOME/.config/owl-papers/queries && date +%s%N")
+      saved = run("mkdir -p $HOME/.config/owl-papers && printf '%s\n' " + sh(value) + " > $HOME/.config/owl-papers/queries && date +%s%N")
     }
   }
-  // Written: ask arXiv again now, past owl-papers' five-minute cache, which `asked` does. Setting it is what asks: the
-  // command below reads it, so the fetch it starts is the one that sees the new searches.
+  // Written: ask arXiv again now, past owl-papers' five-minute cache, which `asked` does, as the ↻ does it.
   on saved {
-    if value != null && value != "" && now != null { asked = now }
+    if value != null && value != "" && now != null { asked = now; refresh() }
+  }
+  // The queries file as it now is: the editor reads the file, or until that read lands, what it last wrote.
+  on qf {
+    wrote = null
   }
   // "add", "replace", or the keyboard's send: a search named here keeps its place, a new one goes at the end.
   on save {
     if value > 0 && draft != "" {
-      let named = draftOf != "" ? draftOf : newLabel
-      let next = count(onFile.filter(f => f.l == named)) > 0
-        ? onFile.map(f => f.l == named ? { l: named, q: query } : f)
-        : onFile + [{ l: named, q: query }]
+      let named = draftOf != "" ? draftOf : labelText
+      let next = count(onNow.filter(f => f.l == named)) > 0
+        ? onNow.map(f => f.l == named ? { l: named, q: query } : f)
+        : onNow + [{ l: named, q: query }]
+      wrote = next
       haptic()
       pending = qhead + join(next.map(f => f.l + ": " + f.q), "\n") + "\n\nmax: ${qmax}\nper: ${qper}\n# the papers tile wrote this at ${fmtTime(now, "HH:mm")}\n"
       draft = ""
@@ -126,6 +133,7 @@ widget "papers" {
   let qlines = lines(qf ?? "").map(t => trim(first(split(t, "#")))).filter(t => t != "")
   let qpairs = qlines.map(t => ({ l: trim(split(t, ":")[0]), q: trim(join(drop(split(t, ":"), 1), ":")) }))
   let onFile = qpairs.filter(p => p.l != "max" && p.l != "per" && p.q != "")
+  let onNow = wrote != null ? wrote : onFile
   let qmax = num(first(qpairs.filter(p => p.l == "max").map(p => p.q)) ?? 40)
   let qper = num(first(qpairs.filter(p => p.l == "per").map(p => p.q)) ?? 10)
 
@@ -139,7 +147,7 @@ widget "papers" {
   ]
 
   // What a queries file this tile writes says at its top. Its `max:` and `per:` are the file's own, kept below them.
-  let qhead = "# What the papers tile watches: one arXiv search per line, `label: search`. The tile's ⚙ edits this file\n# from the phone, and the terminal's `owl-papers` reads it. Searches are what arxiv.org's own search field takes:\nti:\"a phrase\" for titles, abs:\"a phrase\" for abstracts, cat:cs.SE for a category, AND and OR between them.\n\n"
+  let qhead = "# What the papers tile watches: one arXiv search per line, `label: search`. The tile's ⚙ edits this file\n# from the phone, and the terminal's `owl-papers` reads it. Searches are what arxiv.org's own search field takes:\n# ti:\"a phrase\" for titles, abs:\"a phrase\" for abstracts, cat:cs.SE for a category, AND and OR between them.\n\n"
 
   // The searches view's field, a comma between the alternatives, so "flaky test, flakiness" is two. Plain words are
   // looked for as a phrase in titles or abstracts, as the file's own searches are; one with arXiv syntax in it (ti:,
@@ -147,9 +155,13 @@ widget "papers" {
   let terms = split(draft, ",").map(t => trim(t)).filter(t => t != "")
   let typedRaw = count(terms.filter(t => match(t, "(ti|abs|all|cat|au|co|id|jr|rn):") != null || contains(upper(t), " AND ") || contains(upper(t), " OR ") || contains(t, "("))) > 0
   let query = typedRaw ? trim(draft) : join(terms.map(t => "ti:\"" + t + "\" OR abs:\"" + t + "\""), " OR ")
-  // The name its chip gets: the first word of what was typed, without a field prefix, a bracket or quotes, in lower case.
-  let bare = replace(replace(replace(replace(replace(replace(first(words(first(terms))) ?? "", "ti:", ""), "abs:", ""), "all:", ""), "cat:", ""), "(", ""), ")", "")
-  let newLabel = trim(lower(replace(bare, "\"", "")))
+  // The name its chip gets: the first word of what was typed, in lower case, without a field prefix or the punctuation
+  // a search's syntax and its labels disagree about. owl-papers reads a label as letters, digits, `_`, `.` and `-`, so
+  // one with anything else in it would go in a line it skips; what's left of nothing at all is "search".
+  let word1 = first(words(first(terms))) ?? ""
+  let bare = replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(word1, "ti:", ""), "abs:", ""), "all:", ""), "cat:", ""), "au:", ""), "co:", ""), "\"", ""), "(", ""), ")", ""), "'", ""), ":", "")
+  let newLabel = trim(lower(replace(replace(replace(replace(replace(replace(replace(bare, ",", ""), "/", ""), "?", ""), "!", ""), "*", ""), ";", ""), "&", "")))
+  let labelText = newLabel == "" ? "search" : newLabel
 
   // One paper: its title, and under it how long ago it came out, who wrote it, and a dot while it's new.
   component Paper(i) {
@@ -241,7 +253,8 @@ widget "papers" {
       maxLines: 1
       onTap: {
         haptic()
-        let next = onFile.filter(f => f.l != label)
+        let next = onNow.filter(f => f.l != label)
+        wrote = next
         pending = qhead + join(next.map(f => f.l + ": " + f.q), "\n") + "\n\nmax: ${qmax}\nper: ${qper}\n# the papers tile wrote this at ${fmtTime(now, "HH:mm")}\n"
         if draftOf == label { draftOf = ""; draft = "" }
       }
@@ -250,6 +263,7 @@ widget "papers" {
 
   onTap: {
     if newest > readUntil { readUntil = newest }
+    editing = false
     screen()
   }
 
@@ -418,9 +432,8 @@ widget "papers" {
             onTap: url("https://arxiv.org/list/cs.SE/recent")
           }
         }
-      }
-      // What the tile watches: each search here is a chip in the view above, and the file owl-papers reads.
-      if editing {
+      } else {
+        // What the tile watches: each search here is a chip in the view above, and the file owl-papers reads.
         Row {
           gap: 8
           align: center
@@ -436,16 +449,16 @@ widget "papers" {
           }
         }
         Text {
-          text: "Each line is a chip above. Keywords are looked for in titles and abstracts, and a comma goes on to another alternative; arXiv's own syntax (ti:, abs:, cat:, AND) goes in as typed. A name already here is replaced. Tapping a search opens it here to change."
+          text: "Each line is a chip above. Keywords go in titles and abstracts, a comma for another alternative; arXiv's syntax (ti:, abs:, cat:, AND) goes in as typed. Tap a search to change it."
           style: small
           color: muted
-          maxLines: 5
+          maxLines: 6
         }
         Column {
           weight: 1
           scroll: true
           gap: 5
-          for f, i in onFile key i {
+          for f, i in onNow key i {
             Column {
               gap: 3
               padding: [8, 7]
@@ -462,7 +475,7 @@ widget "papers" {
               Text { text: f.q; font: mono; fontSize: 11; color: muted; maxLines: 2 }
             }
           }
-          if len(onFile) == 0 {
+          if len(onNow) == 0 {
             Text {
               text: "No search of its own yet: owl-papers is using the five it ships with, which reset writes here."
               style: small
@@ -472,7 +485,7 @@ widget "papers" {
           }
         }
         Text {
-          text: draft == "" ? "add: keywords, a comma for another alternative" : draftOf != "" ? "→ ${query}" : "${newLabel}: ${query}"
+          text: draft == "" ? "add: keywords, a comma for another alternative" : draftOf != "" ? "→ ${query}" : "${labelText}: ${query}"
           style: small
           color: draft == "" ? muted : accent
           maxLines: 2
@@ -487,7 +500,7 @@ widget "papers" {
         Row {
           gap: 10
           align: center
-          Save { label: draftOf != "" ? "replace ${draftOf}" : "add ${newLabel}" }
+          Save { label: draftOf != "" ? "replace ${draftOf}" : "add ${labelText}" }
           if draftOf != "" {
             Text {
               text: "cancel"
@@ -500,23 +513,26 @@ widget "papers" {
             }
           }
           Spacer { weight: 1 }
-          Text {
-            text: resetAsked ? "tap again: the five it ships with" : "reset to the five"
-            font: mono
-            fontSize: 11
-            color: resetAsked ? orange : muted
-            padding: [4, 4]
-            maxLines: 1
-            onTap: {
-              if resetAsked {
-                haptic()
-                pending = qhead + join(shipped.map(f => f.l + ": " + f.q), "\n") + "\n\nmax: ${qmax}\nper: ${qper}\n# the papers tile wrote this at ${fmtTime(now, "HH:mm")}\n"
-                draft = ""
-                draftOf = ""
-                resetAsked = false
-              } else {
-                resetAsked = true
-              }
+        }
+        // Under them, so "replace" and its cancel never squeeze it out of the row above: one tap asks, the second does it.
+        Text {
+          text: resetAsked ? "tap again: back to the five it ships with" : "reset to the five it ships with"
+          font: mono
+          fontSize: 11
+          color: resetAsked ? orange : muted
+          align: "end"
+          padding: [4, 4]
+          maxLines: 1
+          onTap: {
+            if resetAsked {
+              haptic()
+              wrote = shipped
+              pending = qhead + join(shipped.map(f => f.l + ": " + f.q), "\n") + "\n\nmax: ${qmax}\nper: ${qper}\n# the papers tile wrote this at ${fmtTime(now, "HH:mm")}\n"
+              draft = ""
+              draftOf = ""
+              resetAsked = false
+            } else {
+              resetAsked = true
             }
           }
         }
