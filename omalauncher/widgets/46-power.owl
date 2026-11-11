@@ -1,0 +1,317 @@
+widget "power" {
+  // The battery itself, where widget drain estimates what eats it: the level, whether it's charging and how hard,
+  // the time to full or how long it has left, what the charger offers, the temperature, the health and the cycles,
+  // and the level over the last hours. Reads only Android, so Linux can be closed: no commands, no packages.
+  page: 10
+  order: 1
+  size: 8x4
+  minSize: 4x3
+  padding: 10
+
+  meta {
+    owl: 17
+    description: "The battery and its charging: level, watt hours in or out, percent and mAh an hour, time to full or left, the charger's own watts and whether the cable is holding it back, temperature, health and cycles, and the level over the last hours, with a full screen of all of it"
+    version: "2.0"
+    license: "MIT"
+    category: "system"
+  }
+
+  source bat = android.battery
+  // The current and the charger, which Android only tells when asked: polled every couple of seconds.
+  source p = android.power every 2s
+  source now = clock every 1m
+
+  let level = bat == null ? null : bat.level
+  let charging = bat != null && bat.charging == true
+  let full = bat != null && bat.status == "full"
+  let temp = bat == null ? null : bat.temp
+  let volts = bat == null ? null : bat.voltage
+  let health = bat == null ? null : bat.health
+  let cycles = bat == null ? null : bat.cycles
+  let plugged = bat == null ? null : bat.plugged
+  let watts = p == null ? null : p.watts
+  let chargeTime = p == null ? null : p.chargeTime
+  let mah = p == null ? null : p.charge
+  let current = p == null ? null : p.current
+  // What the battery holds at 100%, from what's in it now: a phone that says 4000 mAh at 80% holds 5000.
+  let usable = mah == null || level == null || level < 5 ? null : mah / level * 100
+  // What the charger offers, which tells a slow cable or brick from a fast one, and null on a phone that doesn't say.
+  let charger = p == null || p.maxCurrent == null || p.maxVoltage == null ? null : p.maxCurrent * p.maxVoltage / 1000
+  // How hard the battery is working, this moment, in percent of itself an hour: the current against what it holds.
+  let rate = mah == null || mah <= 0 || current == null ? null : abs(current) / mah * 100
+  // A verdict on the charging: what goes in against what the charger could give.
+  let quality = charger == null || watts == null ? null : watts >= charger * 0.75 ? "fast" : watts < charger * 0.4 ? "weak" : "ok"
+  let qualityText = quality == null ? null : quality == "fast" ? "fast charging" : quality == "weak" ? "slow: cable or brick" : "charging, not fast"
+  let qualityColor = quality == "fast" ? green : quality == "weak" ? yellow : muted
+  // Held charge over what's going out: how long the battery has left at this rate. Android's own estimate isn't
+  // readable by a launcher, and the current has to be a real drain for this to mean anything.
+  let left = p == null || p.charge == null || p.current == null || p.current > -20 ? null : p.charge / abs(p.current) * 3600
+  let levelColor = level == null ? muted : level <= 15 ? red : level <= 30 ? yellow : green
+  let status = bat == null ? "…" : charging ? "charging" : full ? "full" : plugged != null ? "plugged" : "on battery"
+  let statusColor = charging || full ? green : plugged != null ? yellow : muted
+
+  // The level as the sources have seen it, which with the level moving every few minutes is some hours of it. Before
+  // it has moved at all, a flat line at where it is now, so the chart holds its shape instead of collapsing.
+  let hist = history(level, 80) persist
+  let seen = hist.filter(v => v != null)
+  let line = len(seen) >= 2 ? seen : [level ?? 0, level ?? 0]
+  // The chart follows what the level did rather than 0 to 100, so hours of a slow drain still show a shape: its own
+  // lowest and highest, with a little air above and below.
+  let low = reduce(line, (a, v) => min(a, v), 100)
+  let high = reduce(line, (a, v) => max(a, v), 0)
+  let pad = max(0.6, (high - low) * 0.2)
+
+  // Each level the battery reported, with when: the chart says what it did, these say how fast.
+  state samples = [] persist
+  on bat first {
+    if bat != null && bat.level != null && (len(samples) == 0 || last(samples).v != bat.level) {
+      samples = (samples + [{t: now, v: bat.level}]).take(120)
+    }
+  }
+  let last6h = samples.filter(s => s.t != null && now != null && now - s.t <= 21600)
+  let span = len(last6h) >= 2 ? last(last6h).t - last6h[0].t : 0
+  // Level an hour over the last hours: negative while it drains, positive while it charges.
+  let drift = span >= 600 ? (last(last6h).v - last6h[0].v) / (span / 3600) : null
+  let driftText = drift == null ? null : "${drift > 0 ? "+" : ""}${fixed(drift, 1)} %/h"
+
+  let tileW = tileWidth ?? 400
+  let tileH = tileHeight ?? 300
+  let wide = tileW >= 320
+  let tall = tileH >= 150
+
+  let wattsText = watts == null ? null : charging ? "${fixed(watts, 1)} W in" : "${fixed(abs(watts), 1)} W out"
+  let mahText = mah == null ? null : "${fmtNum(round(mah))} mAh"
+  let rateText = rate == null ? null : "${fixed(rate, 1)} %/h"
+  let capacityText = usable == null ? null : "of ~${fmtNum(round(usable))} mAh"
+
+  let facts = [
+    {label: "charge", value: mahText},
+    {label: charging ? "into the battery" : "out of the battery", value: rateText},
+    {label: "capacity", value: capacityText},
+    {label: "temperature", value: temp == null ? null : "${fixed(temp, 1)}°C"},
+    {label: "health", value: health},
+    {label: "cycles", value: cycles == null ? null : "${cycles}"},
+    {label: "charger", value: charger == null ? null : "${round(charger)} W"},
+    {label: "voltage", value: volts == null ? null : "${fixed(volts, 2)} V"},
+    {label: "current", value: current == null ? null : "${fmtNum(round(current))} mA"},
+    {label: charging ? "time to full" : "time left", value: charging && chargeTime != null ? fmtDuration(chargeTime) : left != null ? fmtDuration(left) : null}
+  ].filter(f => f.value != null)
+  // The few the tile shows, in three columns under the level; the screen has all of them.
+  let brief = [
+    {label: "charge", value: mahText},
+    {label: charging ? "into it" : "out of it", value: rateText},
+    {label: "temperature", value: temp == null ? null : "${fixed(temp, 1)}°C"},
+    {label: "health", value: health},
+    {label: "cycles", value: cycles == null ? null : "${cycles}"},
+    {label: "charger", value: charger == null ? null : "${round(charger)} W"}
+  ].filter(f => f.value != null)
+
+  onTap: screen()
+
+  component Stat(label, value) {
+    Column {
+      gap: 1
+      Text { text: label; font: mono; fontSize: 9; color: muted; maxLines: 1 }
+      Text { text: value; font: mono; fontSize: 15; color: foreground; maxLines: 1 }
+    }
+  }
+
+  component Chart() {
+    Column {
+      gap: 2
+      weight: 1
+      Row {
+        gap: 8
+        align: center
+        Text { text: "level"; font: mono; fontSize: 9; color: muted; weight: 1; maxLines: 1 }
+        Text { text: "${round(low)}–${round(high)}%"; font: mono; fontSize: 9; color: muted; maxLines: 1 }
+        if driftText != null {
+          Text {
+            text: driftText
+            font: mono
+            fontSize: 9
+            color: drift < 0 ? levelColor : accent
+            maxLines: 1
+          }
+        }
+      }
+      Sparkline {
+        values: line
+        min: low - pad
+        max: high + pad
+        color: levelColor
+        area: alpha(levelColor, 0.16)
+        thickness: 2
+        fill: width
+        weight: 1
+      }
+    }
+  }
+
+  Column {
+    gap: 3
+    Row {
+      gap: 6
+      align: center
+      Text { text: "power"; style: muted; color: orange; weight: 1; maxLines: 1 }
+      Text { text: status; font: mono; fontSize: 10; color: statusColor; maxLines: 1 }
+    }
+    Row {
+      gap: 10
+      align: center
+      Text {
+        text: level == null ? "…" : "${level}%"
+        style: wide ? "huge" : "title"
+        bold: true
+        color: levelColor
+        maxLines: 1
+      }
+      // The gauge: the level again, as a ring, for what the number alone doesn't show at a glance.
+      if wide {
+        Ring {
+          value: level ?? 0
+          max: 100
+          size: 58
+          thickness: 6
+          color: levelColor
+          track: alpha(foreground, 0.12)
+          animate value: spring()
+        }
+      }
+      Column {
+        gap: 1
+        weight: 1
+        if wattsText != null {
+          Text {
+            text: wattsText
+            font: mono
+            fontSize: 11
+            color: charging ? green : foreground
+            maxLines: 1
+          }
+        }
+        if charging && chargeTime != null {
+          Text { text: "${fmtDuration(chargeTime)} to full"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+        } else if left != null {
+          Text { text: "${fmtDuration(left)} left"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+        }
+        if qualityText != null {
+          Text { text: qualityText; font: mono; fontSize: 10; color: qualityColor; maxLines: 1 }
+        }
+      }
+    }
+    if tall {
+      Grid {
+        columns: wide ? 3 : 2
+        gap: 8
+        for f in brief key f.label {
+          Column {
+            gap: 1
+            Text { text: f.label; font: mono; fontSize: 9; color: muted; maxLines: 1 }
+            Text {
+              text: f.value
+              font: mono
+              fontSize: 13
+              color: f.label == "temperature" && temp >= 40 ? orange : foreground
+              maxLines: 1
+            }
+          }
+        }
+      }
+      Chart { }
+    } else {
+      Progress { value: level ?? 0; color: levelColor; height: 6 }
+      Text { text: wattsText ?? "…"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+    }
+  }
+
+  screen {
+    title: "power"
+    Column {
+      gap: 12
+      padding: 16
+      scroll: true
+
+      Row {
+        gap: 16
+        align: center
+        Ring {
+          value: level ?? 0
+          max: 100
+          size: 92
+          thickness: 9
+          color: levelColor
+          track: alpha(foreground, 0.12)
+          animate value: spring()
+        }
+        Column {
+          gap: 2
+          weight: 1
+          Text {
+            text: level == null ? "…" : "${level}%"
+            style: huge
+            bold: true
+            color: levelColor
+          }
+          Text { text: status; font: mono; fontSize: 12; color: statusColor }
+          Text {
+            text: [wattsText, rateText].filter(v => v != null).join(" · ")
+            font: mono
+            fontSize: 11
+            color: muted
+          }
+        }
+      }
+
+      if qualityText != null {
+        Text { text: qualityText; font: mono; fontSize: 12; color: qualityColor }
+      }
+
+      Grid {
+        columns: 2
+        gap: 10
+        for f in facts key f.label {
+          Stat { label: f.label; value: f.value }
+        }
+      }
+
+      // The chart again, bigger, over what the level did.
+      Column {
+        gap: 4
+        Text { text: "over the last hours"; font: mono; fontSize: 10; color: muted }
+        Sparkline {
+          values: line
+          min: low - pad
+          max: high + pad
+          color: levelColor
+          area: alpha(levelColor, 0.18)
+          thickness: 2
+          fill: width
+          height: 130
+        }
+        Row {
+          gap: 8
+          Text { text: "${round(low)}–${round(high)}%"; font: mono; fontSize: 10; color: muted; weight: 1 }
+          if span >= 60 {
+            Text { text: "seen ${fmtDuration(span)}"; font: mono; fontSize: 10; color: muted }
+          }
+          if driftText != null {
+            Text { text: driftText; font: mono; fontSize: 10; color: drift < 0 ? levelColor : accent }
+          }
+        }
+      }
+
+      Text {
+        text: "level from Android; watts, current, charge and the charger from android.power; the chart is the level as this widget has seen it"
+        style: small
+        color: muted
+      }
+
+      Row {
+        gap: 10
+        Button { text: "battery settings"; onTap: settings("battery") }
+        Button { text: "close"; onTap: close() }
+      }
+    }
+  }
+}

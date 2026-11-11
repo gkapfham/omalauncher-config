@@ -1,0 +1,325 @@
+widget "repos" {
+  // Your own repositories, rather than your notifications: the setup's local git — files changed, commits not
+  // pushed, the last commit — and each GitHub repository's newest Actions run with what it built, which branch and
+  // how long it took, red while it fails. A tap opens the run; the screen (tap the heading) has more, per repository.
+  page: 10
+  order: 2
+  size: 4x5
+  minSize: 4x3
+  padding: 10
+
+  meta {
+    owl: 17
+    description: "Your own repositories: the setup's changed files, unpushed commits and last commit, and each GitHub repository's newest Actions run with its branch and duration, red while it fails"
+    version: "1.1"
+    license: "MIT"
+    category: "dev"
+  }
+
+  requires { pacman: ["git", "github-cli", "jq"] }
+
+  // The setup's own repository: what is changed but not saved, what is committed but not pushed, and the last
+  // commit's subject. Row 1 of the tile; a tap opens a terminal there, where save.sh does both.
+  source cfg = cmd("""
+    d=$(git -C ~/omalauncher-config status --porcelain 2>/dev/null | wc -l)
+    a=$(git -C ~/omalauncher-config rev-list --count '@{u}..HEAD' 2>/dev/null || echo 0)
+    t=$(git -C ~/omalauncher-config log -1 --format=%ct 2>/dev/null || echo 0)
+    s=$(git -C ~/omalauncher-config log -1 --format=%s 2>/dev/null || true)
+    b=$(git -C ~/omalauncher-config rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    f=$(git -C ~/omalauncher-config status --porcelain 2>/dev/null | head -8 || true)
+    jq -nc --argjson d "$d" --argjson a "$a" --argjson t "$t" --arg s "$s" --arg b "$b" --arg f "$f" \
+      '{dirty: $d, ahead: $a, at: $t, subject: $s, branch: $b, files: ($f | split("\n") | map(select(length > 0)))}'
+
+  """) every 10m json timeout 30s status
+
+  // Each GitHub repository's last five Actions runs, asked with the GitHub CLI this system is signed in to. Five
+  // rather than one says how deep a failure goes, and what a run built without another request. One request per
+  // repository, every quarter of an hour. The file has `owner/name`, and may name the repository after a space:
+  // `gkapfham/www.gregorykapfhammer.com site`. Without the file, the site and the CV.
+  source ci = cmd("""
+    if [ -f ~/.config/owl-repos/repos ]; then
+      list=$(grep -v '^[[:space:]]*#' ~/.config/owl-repos/repos | grep . || true)
+    fi
+    [ -n "$list" ] || list=$(printf '%s\n' gkapfham/www.gregorykapfhammer.com site gkapfham/curriculum-vitae cv)
+    printf '%s\n' "$list" | while read -r repo label; do
+      [ -n "$repo" ] || continue
+      out=$(/usr/bin/gh api "repos/$repo/actions/runs?per_page=5" 2>/dev/null || true)
+      [ -n "$out" ] || out=null
+      printf '%s' "$out" | jq -c --arg repo "$repo" --arg label "$label" '{
+        repo: $repo,
+        label: $label,
+        runs: [.workflow_runs[]? | {
+          name: .name, title: .display_title, branch: .head_branch, event: .event,
+          status: .status, conclusion: .conclusion, url: .html_url,
+          at: .updated_at, started: .created_at, actor: (.actor.login // null), number: .run_number
+        }]
+      }'
+    done | jq -s .
+  """) every 15m json timeout 120s status
+
+  source now = clock every 1m
+
+  // The last answer that worked, kept so a failed fetch leaves the list as it was, and when it came in.
+  state last = [] persist
+  state at = 0
+
+  on ci first { if ci.ok { last = ci.out; at = now } }
+  on ci { if ci.ok { last = ci.out; at = now } }
+
+  let feed = ci != null && ci.ok && ci.out != null ? ci.out : last
+  let offline = ci != null && !ci.ok
+  // A repo's newest run says where it stands; casts and skips aren't failures.
+  let rows = (feed ?? []).map(x => {
+    name: x.label != "" ? x.label : (split(x.repo, "/")[1] ?? x.repo),
+    full: x.repo,
+    latest: len(x.runs) > 0 ? x.runs[0] : null,
+    done: len(x.runs) > 0 ? x.runs[0].status == "completed" : false,
+    state: len(x.runs) == 0 ? "no runs" : x.runs[0].status != "completed" ? x.runs[0].status : (x.runs[0].conclusion ?? "done"),
+    color: len(x.runs) == 0 ? muted : x.runs[0].status != "completed" ? accent : x.runs[0].conclusion == "success" ? green : x.runs[0].conclusion == "skipped" ? muted : red,
+    at: len(x.runs) == 0 ? null : parseTime(x.runs[0].at),
+    // How long it took, when it has finished.
+    took: len(x.runs) == 0 || x.runs[0].started == null || x.runs[0].at == null ? null : parseTime(x.runs[0].at) - parseTime(x.runs[0].started),
+    // How many of the five it kept failed: one red among greens reads differently from five.
+    reds: len(x.runs.filter(r => r.conclusion == "failure" || r.conclusion == "timed_out")),
+    kept: len(x.runs),
+    runs: x.runs
+  })
+  let failing = len(rows.filter(r => r.color == red))
+  let cfgOK = cfg != null && cfg.ok
+  let dirty = cfgOK ? (cfg.out.dirty ?? 0) : null
+  let ahead = cfgOK ? (cfg.out.ahead ?? 0) : null
+  let cfgState = cfg == null ? "…" : !cfgOK ? "?" : dirty > 0 ? "${dirty} changed" : ahead > 0 ? "${ahead} unpushed" : "clean"
+  let cfgColor = cfg == null ? muted : !cfgOK ? muted : dirty > 0 ? yellow : ahead > 0 ? orange : green
+  let cfgAt = cfgOK ? (cfg.out.at ?? null) : null
+  let cfgSubject = cfgOK ? (cfg.out.subject ?? "") : ""
+  let cfgBranch = cfgOK ? (cfg.out.branch ?? "") : ""
+  let cfgFiles = cfgOK ? (cfg.out.files ?? []) : []
+  // A tall tile has room for the run under each name: what it built, on which branch, and how long it took. A short
+  // one keeps the names and where they stand.
+  let roomy = (tileHeight ?? 200) >= 150
+  let fits = clamp(floor(((tileHeight ?? 200) - 26) / (roomy ? 56 : 22)), 1, 8)
+  let shown = rows.take(fits)
+
+  onTap: screen()
+
+  // One repository: where it stands, and under it what its newest run was, or why it isn't there.
+  component Repo(r) {
+    Column {
+      gap: 0
+      onTap: { if r.latest != null && r.latest.url != null { url(r.latest.url) } }
+      Row {
+        gap: 5
+        align: center
+        Box { width: 6; height: 6; radius: 3; background: r.color }
+        Text { text: r.name; fontSize: 12; weight: 1; maxLines: 1 }
+        Text { text: r.state; font: mono; fontSize: 9; color: r.color; maxLines: 1 }
+        Text { text: r.at == null ? "" : fmtAgo(r.at, now); font: mono; fontSize: 9; color: muted; maxLines: 1 }
+      }
+      if roomy {
+        Text {
+          text: r.latest == null ? "no workflow has run" : (r.latest.title ?? "") != "" ? r.latest.title : (r.latest.name ?? "")
+          font: mono
+          fontSize: 9
+          color: muted
+          maxLines: 1
+        }
+        if r.latest != null {
+          Row {
+            gap: 6
+            Text { text: r.latest.branch ?? ""; font: mono; fontSize: 9; color: alpha(accent, 0.8); maxLines: 1 }
+            Text { text: r.took == null ? "" : fmtDuration(r.took); font: mono; fontSize: 9; color: muted; maxLines: 1 }
+            Text { text: r.reds > 1 ? "${r.reds} of ${r.kept} red" : ""; font: mono; fontSize: 9; color: orange; maxLines: 1 }
+          }
+        }
+      }
+    }
+  }
+
+  Column {
+    gap: 3
+    Row {
+      gap: 6
+      align: center
+      Text { text: "repos"; style: muted; color: orange; maxLines: 1 }
+      if failing > 0 {
+        Text { text: "${failing} failing"; font: mono; fontSize: 10; color: red; maxLines: 1 }
+      }
+      if offline {
+        Text { text: "offline"; font: mono; fontSize: 10; color: orange; maxLines: 1 }
+      }
+      Spacer { weight: 1 }
+      Text {
+        text: "↻"
+        font: mono
+        fontSize: 13
+        color: accent
+        padding: [6, 0]
+        maxLines: 1
+        onTap: { haptic(); refresh() }
+      }
+    }
+    // The setup's own repository, first: it is the one this phone can change.
+    Column {
+      gap: 0
+      onTap: terminal("cd ~/omalauncher-config && git status --short && git status -sb | head -1")
+      Row {
+        gap: 5
+        align: center
+        Box { width: 6; height: 6; radius: 3; background: cfgColor }
+        Text { text: "config"; fontSize: 12; weight: 1; maxLines: 1 }
+        Text { text: cfgState; font: mono; fontSize: 9; color: cfgColor; maxLines: 1 }
+        Text { text: cfgAt == null || cfgAt == 0 ? "" : fmtAgo(cfgAt, now); font: mono; fontSize: 9; color: muted; maxLines: 1 }
+      }
+      if roomy {
+        Text { text: cfgSubject != "" ? cfgSubject : "the setup's repository"; font: mono; fontSize: 9; color: muted; maxLines: 1 }
+        Text { text: "tap for git status"; font: mono; fontSize: 9; color: muted; maxLines: 1 }
+      }
+    }
+    for r in shown key r.full {
+      Repo { r: r }
+    }
+    if len(rows) > len(shown) {
+      Text { text: "+${len(rows) - len(shown)} more"; font: mono; fontSize: 9; color: muted; maxLines: 1 }
+    }
+    Spacer { weight: 1 }
+    if roomy {
+      Text {
+        text: at == 0 ? "" : offline ? "offline · last checked ${fmtAgo(at, now)} ago" : "checked ${fmtAgo(at, now)} ago"
+        font: mono
+        fontSize: 9
+        color: offline ? orange : muted
+        maxLines: 1
+      }
+    }
+  }
+
+  screen {
+    title: "repos"
+    Column {
+      scroll: true
+      gap: 10
+      padding: [2, 6]
+      onPull: refresh()
+      Row {
+        gap: 8
+        align: center
+        Text {
+          text: at == 0 ? "asking GitHub…" : offline ? "offline · showing the last answer" : "checked ${fmtAgo(at, now)} ago"
+          font: mono
+          fontSize: 10
+          color: offline ? orange : muted
+          weight: 1
+          maxLines: 1
+        }
+        Text { text: "refresh"; font: mono; fontSize: 10; color: accent; maxLines: 1; onTap: { haptic(); refresh() } }
+      }
+      // The setup, with all of it: what is unsaved, what is unpushed, and the commit under it.
+      Column {
+        gap: 3
+        padding: [8, 8]
+        background: surface
+        radius: 4
+        onTap: terminal("cd ~/omalauncher-config && git status")
+        Text { text: "config · the setup"; font: mono; fontSize: 11; color: orange; maxLines: 1 }
+        Row {
+          gap: 12
+          Text { text: cfgState; font: mono; fontSize: 12; color: cfgColor; maxLines: 1 }
+          Text { text: cfgBranch; font: mono; fontSize: 10; color: accent; maxLines: 1 }
+          Text { text: cfgAt == null || cfgAt == 0 ? "" : "last commit ${fmtAgo(cfgAt, now)} ago"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+        }
+        if cfgSubject != "" {
+          Text { text: cfgSubject; fontSize: 13; maxLines: 2 }
+        }
+        for f in cfgFiles key f {
+          Text { text: f; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+        }
+        if len(cfgFiles) > 0 {
+          Text { text: "save.sh commits and pushes them"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+        } else {
+          Text { text: "tap for git status, or run save.sh there"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+        }
+      }
+      for r in rows key r.full {
+        Column {
+          gap: 4
+          padding: [10, 9]
+          background: surface
+          radius: 4
+          Row {
+            gap: 8
+            align: center
+            Box { width: 8; height: 8; radius: 4; background: r.color }
+            Text { text: r.name; fontSize: 17; weight: 1; maxLines: 1 }
+            Text { text: r.state; font: mono; fontSize: 11; color: r.color; maxLines: 1 }
+            Text { text: r.at == null ? "" : fmtAgo(r.at, now); font: mono; fontSize: 10; color: muted; maxLines: 1 }
+          }
+          Text {
+            text: r.full + " ↗"
+            font: mono
+            fontSize: 10
+            color: muted
+            maxLines: 1
+            onTap: url("https://github.com/${r.full}")
+          }
+          if r.latest != null {
+            if r.latest.title != null && r.latest.title != "" {
+              Text { text: r.latest.title; fontSize: 14; maxLines: 3 }
+            }
+            Row {
+              gap: 10
+              Text { text: r.latest.name ?? ""; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+              Text { text: r.latest.branch ?? ""; font: mono; fontSize: 10; color: accent; maxLines: 1 }
+              Text { text: r.took == null ? "" : fmtDuration(r.took); font: mono; fontSize: 10; color: muted; maxLines: 1 }
+              Text { text: "no. ${r.latest.number ?? 0}"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+              Text { text: r.latest.event ?? ""; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+            }
+            if r.kept > 1 && r.reds > 0 {
+              Text {
+                text: "${r.reds} of the last ${r.kept} failed"
+                font: mono
+                fontSize: 10
+                color: r.reds == r.kept ? red : orange
+                maxLines: 1
+              }
+            }
+            // The runs under it, older ones under the newest: a failure that keeps failing shows its depth here.
+            for x, i in r.runs.drop(1).take(4) key i {
+              Row {
+                height: 22
+                gap: 8
+                align: center
+                padding: [0, 4]
+                Text {
+                  text: x.conclusion == "success" ? "●" : x.conclusion == null ? "◐" : "●"
+                  font: mono
+                  fontSize: 10
+                  color: x.conclusion == "success" ? green : x.conclusion == null ? accent : red
+                  maxLines: 1
+                }
+                Text { text: "no. ${x.number ?? 0}"; font: mono; fontSize: 10; color: muted; maxLines: 1; width: 54 }
+                Text { text: x.name ?? ""; font: mono; fontSize: 10; color: muted; weight: 1; maxLines: 1 }
+                Text { text: x.conclusion ?? x.status ?? ""; font: mono; fontSize: 10; color: x.conclusion == "success" ? green : red; maxLines: 1 }
+                Text { text: x.at == null ? "" : fmtAgo(parseTime(x.at), now); font: mono; fontSize: 10; color: muted; maxLines: 1; width: 34; align: end }
+                onTap: { if x.url != null { url(x.url) } }
+              }
+            }
+          } else {
+            Text { text: "no workflow has run in this repository"; style: small; color: muted; maxLines: 2 }
+          }
+        }
+      }
+      if len(rows) == 0 && !offline {
+        Text { text: "no repositories yet — add owner/name lines to ~/.config/owl-repos/repos"; style: small; color: muted; maxLines: 3 }
+      }
+      Text {
+        text: "⋮ open GitHub ↗"
+        font: mono
+        fontSize: 10
+        color: accent
+        align: center
+        maxLines: 1
+        onTap: url("https://github.com/gkapfham?tab=repositories")
+      }
+    }
+  }
+}

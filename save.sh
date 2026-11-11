@@ -55,6 +55,12 @@ if [ -f "$HOME"/.local/bin/owl-agenda ]; then cp -p "$HOME"/.local/bin/owl-agend
 if [ -f "$HOME"/.local/bin/owl-mail ]; then cp -p "$HOME"/.local/bin/owl-mail bin/; fi
 if [ -f "$HOME"/.local/bin/owl-config ]; then cp -p "$HOME"/.local/bin/owl-config bin/; fi
 if [ -f "$HOME"/.local/bin/owl-usage ]; then cp -p "$HOME"/.local/bin/owl-usage bin/; fi
+if [ -f "$HOME"/.local/bin/owl-papers ]; then cp -p "$HOME"/.local/bin/owl-papers bin/; fi
+# What owl-papers watches: the arXiv searches the papers tile shows, one per line.
+if [ -f "$HOME"/.config/owl-papers/queries ]; then
+  mkdir -p omalauncher/papers
+  cp -p "$HOME"/.config/owl-papers/queries omalauncher/papers/
+fi
 # omarchy-sshd starts sshd for the sshd tile, and lives in /usr/local/bin, outside the home.
 if [ -f /usr/local/bin/omarchy-sshd ]; then cp -p /usr/local/bin/omarchy-sshd bin/; fi
 if [ -d "$pi"/skills ]; then tar -C "$pi"/skills --exclude=node_modules -cf - . | tar -C pi/agent/skills -xf -; fi

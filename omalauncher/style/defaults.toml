@@ -25,11 +25,23 @@ empty-page-left = true
 # The empty page after home's last, for new tiles; false shows it only while a tile is carried, to drop it on.
 empty-page-right = true
 
+# The page home opens on and Home returns to: 1 is the first page of tiles, 0 the face left of it, -1 the one left of that. A number with no page of its own takes the first page after it, or the last page when it is past them all.
+home-page = 1
+
 # Columns of home's grid. Fewer make bigger cells, and apps show their names under their icons once a cell is tall enough.
 columns = 6
 
 # One page even on a screen shaped like an unfolded foldable's; false shows two there, auto-detected from the screen's shape and width.
 single-page = false
+
+# An upright grid and the bar below it on a foldable's cover screen, whose window is wider than tall while the phone stands upright; false turns the grid on its side there as in a phone's landscape.
+cover-screen = true
+
+# A home of its own on a foldable's unfolded inner screen, one wide page whose tiles can span the hinge, kept under [unfolded] in home/layout.toml; it starts from home's pages side by side. False shows home's pages there as home.single-page says.
+unfolded-layout = false
+
+# Columns of the unfolded inner screen's grid, with home.unfolded-layout.
+unfolded-columns = 12
 
 [widgets]
 # Space in dp between two of home's widgets (all of it, unlike Hyprland's gaps_in, which each window has on its side).
@@ -116,6 +128,9 @@ font = "JetBrains Mono"
 
 # The terminals' em size in dp, before Android's font size: 10 smaller, 12 default, 14 larger.
 text = 12
+
+# The terminals' input as a normal text field, so the keyboard can suggest words and clipboard items, glide-type and dictate; false hides these but passes raw keys. Text reaches the terminal a word at a time. Takes effect when the keyboard next opens.
+keyboard-suggestions = true
 
 [gestures]
 # The app drawer, which swiping up opens: a panel's file name in ~/.config/omalauncher/widgets, by default drawer.owl; "none" leaves only tapping the bar to open drawer.owl. One that's gone or doesn't compile falls back to drawer.owl, then to .stock-drawer.owl, the drawer as it ships.

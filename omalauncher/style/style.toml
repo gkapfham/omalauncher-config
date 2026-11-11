@@ -11,7 +11,6 @@ font = "Maple Mono NF"
 recent-apps = false
 empty-page-left = false
 columns = 8
-single-page = true
 
 [widgets]
 opacity = 0.93

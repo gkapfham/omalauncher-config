@@ -2,7 +2,7 @@ widget "now-playing" {
   size: 6x2
   minSize: 3x2
   requires { pacman: [] }
-  meta { description: "What's playing on your phone, from any music or podcast app: album art, track, progress and play, pause and skip. It keeps the last track when Android ends the session, and a tap opens the app that plays it"; version: "1.6"; license: "MIT"; category: "media"; owl: 16 }
+  meta { description: "What's playing on your phone, from any music or podcast app: album art, track, progress and play, pause and skip. It keeps the last track when Android ends the session, and a tap opens the app that plays it"; version: "1.7"; license: "MIT"; category: "media"; owl: 16 }
 
   // What it says, in the phone's language where it has a set. Tracks, artists and apps come as they are.
   strings {
@@ -61,6 +61,8 @@ widget "now-playing" {
   // Enough rows to give a long episode title a second line.
   let roomy = rows == null || rows >= 3
   let art = clamp((tileHeight ?? 130) - 26, 40, 132)
+  // The icon of the app that plays, which Android keeps: the art frame's floor when the art is gone.
+  let icon = cur != null && cur.package != null ? "app:" + cur.package : null
   // A tile taller than wide (landscape home screen, or a tall portrait tile) stacks
   // art, text and controls vertically instead of side by side.
   let tall = tileWidth != null && tileHeight != null && tileHeight > tileWidth * 1.3
@@ -115,33 +117,47 @@ widget "now-playing" {
     }
   }
 
-  component Art(src, d, dim = false) {
+  // The art frame looks the same whatever Android gives: album art when there is some, and under it
+  // the icon of the app that plays, which Android keeps. The art is a handle Android drops with the
+  // notification, so the icon is what shows once it's gone: no hole, and the same rounded square.
+  component Art(src, icon, d, dim = false) {
     Box {
       size: d
-      opacity: dim ? 0.55 : 1
+      opacity: dim ? 0.6 : 1
       // Rounded as much as the launcher's corner style: square on edge, 8dp on round.
       radius: 8 * corners
       clip: true
       align: center
+      background: alpha(muted, 0.12)
+      if !dim {
+        // Gradients only fill inside a Canvas, not as a background. Quiet, so the icon reads on it.
+        Canvas {
+          rect(0, 0, width, height, fill: linear(0, 0, width, height, [alpha(accent, 0.22), alpha(magenta, 0.16)]))
+        }
+      }
+      if icon != null {
+        Image { src: icon; fit: contain; width: d * 0.52; height: d * 0.52 }
+      } else if src == null {
+        Text { text: "♪"; fontSize: d * 0.4; align: center; width: d; color: alpha(foreground, 0.8) }
+      }
       if src != null {
         Image { src: src; fit: cover; fill: true }
-      } else {
-        // Gradients only fill inside a Canvas, not as a background.
-        Canvas {
-          rect(0, 0, width, height, fill: linear(0, 0, width, height, [alpha(accent, 0.55), alpha(magenta, 0.35)]))
-          text("♪", width / 2, height / 2, size: d * 0.45, align: center, color: alpha(foreground, 0.85))
-        }
       }
     }
   }
 
-  // The source app, with a live equalizer while it plays.
+  // The source app, with a live equalizer while it plays. Its room stays while it's quiet,
+  // so the name doesn't shift as playback starts and stops.
   component AppLine() {
     Row {
       align: center
       gap: 6
-      if playing {
-        Bars { }
+      Box {
+        width: 14
+        height: 12
+        if playing {
+          Bars { }
+        }
       }
       Text { text: lower(cur.app ?? ""); style: label; color: playing ? accent : muted; maxLines: 1; weight: 1 }
     }
@@ -159,7 +175,7 @@ widget "now-playing" {
       if tall {
         Column {
           gap: 10
-          Art { src: null; d: tallArt }
+          Art { src: null; icon: null; d: tallArt; dim: true }
           Text { text: str.nothing; style: body; color: muted }
           Text { text: str.start; style: small; color: muted; maxLines: 2 }
         }
@@ -167,7 +183,7 @@ widget "now-playing" {
         Row {
           align: center
           gap: 12
-          Art { src: null; d: art }
+          Art { src: null; icon: null; d: art; dim: true }
           Column {
             weight: 1
             gap: 2
@@ -180,7 +196,7 @@ widget "now-playing" {
       if tall {
         Column {
           gap: 8
-          Art { src: cur.art; d: tallArt; dim: stale }
+          Art { src: cur.art; icon: icon; d: tallArt; dim: stale }
           Column {
             gap: 2
             AppLine { }
@@ -189,15 +205,13 @@ widget "now-playing" {
             Text { text: cur.album ?? ""; style: small; color: muted; maxLines: 1 }
           }
           Spacer { weight: 1 }
-          if dur > 0 {
-            Progress { value: pos; max: dur; color: accent; track: alpha(muted, 0.2); animate value: tween(900ms, "linear") }
-            Row {
-              align: center
-              gap: 4
-              Clock { s: pos }
-              Spacer { weight: 1 }
-              Clock { s: dur }
-            }
+          Progress { value: dur > 0 ? pos : 0; max: dur > 0 ? dur : 1; color: accent; track: alpha(muted, 0.2); animate value: tween(900ms, "linear") }
+          Row {
+            align: center
+            gap: 4
+            Clock { s: pos }
+            Spacer { weight: 1 }
+            Clock { s: dur }
           }
           Row {
             align: center
@@ -214,7 +228,7 @@ widget "now-playing" {
           align: center
           gap: 12
           if !narrow {
-            Art { src: cur.art; d: art; dim: stale }
+            Art { src: cur.art; icon: icon; d: art; dim: stale }
           }
           Column {
             weight: 1
@@ -223,9 +237,8 @@ widget "now-playing" {
             Text { text: cur.title; style: body; bold: true; maxLines: narrow ? 2 : roomy ? 2 : 1 }
             Text { text: [cur.artist, narrow ? null : cur.album].filter(x => x != null).join(" · "); style: small; color: muted; maxLines: 1 }
             Spacer { weight: 1 }
-            if dur > 0 {
-              Progress { value: pos; max: dur; color: accent; track: alpha(muted, 0.2); animate value: tween(900ms, "linear") }
-            }
+            // It keeps its place with no duration known, so the text above it doesn't shift.
+            Progress { value: dur > 0 ? pos : 0; max: dur > 0 ? dur : 1; color: accent; track: alpha(muted, 0.2); animate value: tween(900ms, "linear") }
             Row {
               align: center
               gap: 4

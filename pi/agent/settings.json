@@ -7,9 +7,6 @@
     "npm:pi-open-tui",
     "npm:pi-web-access",
     "npm:@juicesharp/rpiv-ask-user-question",
-    "npm:pi-copy-message",
-    "npm:pi-interactive-shell",
-    "npm:tau-mirror",
     "npm:@latentminds/pi-quotas"
   ],
   "enableSkillCommands": true,
@@ -17,8 +14,6 @@
     "{\"source\":\"npm:pi-open-tui\",\"scope\":\"user\"}": "0.4.4",
     "{\"source\":\"npm:pi-web-access\",\"scope\":\"user\"}": "0.47.0",
     "{\"source\":\"npm:pi-codex-goal\",\"scope\":\"user\"}": "0.7.8",
-    "{\"source\":\"npm:pi-copy-message\",\"scope\":\"user\"}": "4.0.12",
-    "{\"source\":\"npm:pi-interactive-shell\",\"scope\":\"user\"}": "0.18.0",
     "{\"source\":\"npm:pi-gateway\",\"scope\":\"user\"}": "0.2.0",
     "{\"source\":\"npm:pi-session-search\",\"scope\":\"user\"}": "1.6.1"
   }

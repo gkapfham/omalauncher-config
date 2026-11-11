@@ -1,0 +1,289 @@
+widget "papers" {
+  // What's new on arXiv: the feed owl-papers fetches from arXiv's own API, so no account and no key. The searches
+  // it runs are in ~/.config/owl-papers/queries, one per line, and each becomes a chip in the screen. The tile's list
+  // scrolls, as the hacker news tile's does, so a swipe shows the papers under the first few, a pull at its top asks
+  // again, and "load 20 more" under it asks for more; the ↻ beside the heading refreshes at once. Tapping a paper
+  // opens it in the browser, and tapping anywhere else on the tile opens the wider list, which marks what you've seen.
+  page: 6
+  order: 2
+  size: 8x6
+  minSize: 4x4
+  padding: 8
+
+  meta {
+    owl: 17
+    description: "What's new on arXiv in software testing: flaky tests, test generation, program repair, LLM agents, and cs.SE's newest testing work. The list scrolls, refresh or load 20 more, tap a paper to read it, the tile for the whole list and its filters"
+    version: "1.0"
+    license: "MIT"
+    category: "news"
+  }
+
+  requires { pacman: ["python"] }
+
+  // owl-papers (in ~/.local/bin) asks arXiv for each search in its queries file and prints the newest of each as
+  // JSON. `--max` is how many papers the feed holds, which "load 20 more" raises, and `--force` skips its five-minute
+  // cache, which a tap on refresh asks for. A failed fetch prints what it last had, marked `stale`, so the feed
+  // stays where it was instead of emptying the tile.
+  source pp = cmd("owl-papers json --max ${int(want)}" + (asked > 0 ? " --force" : "")) every 20m json timeout 150s status
+  source now = clock every 1m
+
+  // How many papers the feed holds: "load 20 more" in the screen raises it 20 at a time, up to 200. A restart starts
+  // again at 40.
+  state want = 40
+  // When refresh or load 20 more was tapped, in seconds: the tile and the screen say "checking" until the answer
+  // comes, or 90 s pass without one. It also asks the command for a fetch past the cache, and 0 once one is in.
+  state asked = 0
+  // The newest paper you've seen: what came out after it is what the tile counts and dots.
+  state readUntil = 0 persist
+  // The last good answer, kept so a fetch that fails leaves the list where it is.
+  state last = null persist
+  // The chip picked in the screen: a search's label, or "" for all of them.
+  state tag = ""
+
+  on pp first {
+    if pp.ok && pp.out != null && pp.out.items != null {
+      last = pp.out
+      // The first time, everything already here counts as seen: the dots start with what's new from now on.
+      if readUntil == 0 && len(pp.out.items) > 0 { readUntil = pp.out.items[0].p }
+      if (pp.out.max ?? 0) > want { want = pp.out.max }
+    }
+  }
+  on pp {
+    asked = 0
+    if pp.ok && pp.out != null && pp.out.items != null {
+      last = pp.out
+      // A cache left from a longer ask (owl-papers --max, or before a restart) carries more than `want` says:
+      // take that as what's wanted, so "load 20 more" asks for more than is on screen.
+      if (pp.out.max ?? 0) > want { want = pp.out.max }
+    }
+  }
+
+  // This fetch's answer, the last one that worked, or one the script kept from before and marked stale.
+  let feed = pp != null && pp.out != null && pp.out.items != null ? pp.out : last
+  let stale = feed != null && feed.stale == true
+  let error = feed == null ? (pp == null ? null : pp.err) : (feed.error ?? null)
+  let updated = feed == null ? null : feed.at
+
+  let items = feed == null ? [] : (feed.items ?? [])
+  // The searches, each with how many papers it found in what's shown, in the order the queries file has them.
+  let searches = feed == null ? [] : (feed.queries ?? []).map(s => ({ l: s.l, n: len(items.filter(i => i.q.indexOf(s.l) >= 0)) }))
+  let unseen = len(items.filter(i => i.p > readUntil))
+  let newest = len(items) == 0 ? 0 : items[0].p
+  // The screen's list: everything, or what one search found.
+  let listed = tag == "" ? items : items.filter(i => i.q.indexOf(tag) >= 0)
+  let when = updated == null ? null : fmtAgo(updated, now)
+  // A fetch that was asked for is on its way, or has taken too long to keep saying so.
+  let busy = asked > 0 && now - asked < 90
+
+  // One paper: its title, and under it how long ago it came out, who wrote it, and a dot while it's new.
+  component Paper(i) {
+    Column {
+      gap: 0
+      onTap: url("https://arxiv.org/abs/${i.id}")
+      Text { text: i.t; fontSize: 12; maxLines: 2; color: foreground }
+      Row {
+        gap: 5
+        align: center
+        Text { text: fmtAgo(i.p, now); font: mono; fontSize: 9; color: muted; width: 24; maxLines: 1 }
+        Text {
+          text: i.n == 0 ? i.c : i.n == 1 ? i.a[0] : "${i.a[0]} +${i.n - 1}"
+          font: mono
+          fontSize: 9
+          color: muted
+          weight: 1
+          maxLines: 1
+        }
+        Text { text: i.q[0]; font: mono; fontSize: 9; color: alpha(accent, 0.75); maxLines: 1 }
+        if i.p > readUntil {
+          Box { width: 5; height: 5; radius: 3; background: accent }
+        }
+      }
+    }
+  }
+
+  // "load 20 more", at the foot of the tile and of the screen: it holds a longer list, and the fetch behind it asks
+  // every search for more rather than paging further down. At 200 it stops, so a tile left scrolling can't grow
+  // without end.
+  component More(size, centered) {
+    Text {
+      text: busy ? "loading…" : want >= 200 ? "that's all for now" : "load 20 more"
+      font: mono
+      fontSize: size
+      color: busy || want >= 200 ? muted : accent
+      align: centered ? "center" : "start"
+      padding: [0, 2]
+      maxLines: 1
+      onTap: {
+        if !busy && want < 200 {
+          haptic()
+          want = min(want + 20, 200)
+          asked = now
+          refresh()
+        }
+      }
+    }
+  }
+
+  // The button that asks arXiv again now, on the tile and in the screen.
+  component Check(label, size) {
+    Text {
+      text: label
+      font: mono
+      fontSize: size
+      color: busy ? muted : accent
+      padding: [8, 0]
+      maxLines: 1
+      onTap: {
+        haptic()
+        asked = now
+        refresh()
+      }
+    }
+  }
+
+  onTap: {
+    if newest > readUntil { readUntil = newest }
+    screen()
+  }
+
+  Column {
+    gap: 3
+    Row {
+      gap: 6
+      align: center
+      Text { text: "papers"; style: muted; color: orange; weight: 1; maxLines: 1 }
+      if unseen > 0 {
+        Text { text: "${unseen} new"; font: mono; fontSize: 10; color: accent; maxLines: 1 }
+      }
+      if busy {
+        Text { text: "checking"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+      } else if stale {
+        Text { text: "offline"; font: mono; fontSize: 10; color: orange; maxLines: 1 }
+      } else if feed == null {
+        Text { text: "…"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+      }
+      Check { label: "↻"; size: 14 }
+    }
+    if error != null && len(items) == 0 {
+      Column {
+        gap: 4
+        Text { text: error; style: small; color: muted; maxLines: 3 }
+      }
+    } else if feed == null {
+      Text { text: "asking arXiv…"; style: small; color: muted }
+    } else if len(items) == 0 {
+      Text { text: "nothing new"; style: small; color: muted }
+    } else {
+      // The list itself scrolls, as the hacker news tile's does, so the tile shows all it holds and not only what fits:
+      // a swipe on it moves the papers and a pull at its top asks arXiv again. Lazy, since a longer ask can be 200.
+      Column {
+        scroll: true
+        lazy: true
+        weight: 1
+        gap: 4
+        onPull: { asked = now; refresh() }
+        for i in items key i.id {
+          Paper { i: i }
+        }
+      }
+      More { size: 10; centered: true }
+    }
+  }
+
+  screen {
+    title: "papers"
+    Column {
+      gap: 8
+      padding: [2, 4]
+      Row {
+        gap: 8
+        align: center
+        Text {
+          text: busy ? "checking…" : updated == null ? "asking arXiv…" : stale ? "offline · ${fmtAgo(updated, now)} old" : when == "now" ? "checked just now" : "checked ${when} ago"
+          font: mono
+          fontSize: 10
+          color: busy ? muted : stale ? orange : muted
+          weight: 1
+          maxLines: 1
+        }
+        Check { label: "refresh"; size: 10 }
+      }
+      Row {
+        wrap: true
+        gap: 5
+        Text {
+          text: "all ${len(items)}"
+          font: mono
+          fontSize: 10
+          color: tag == "" ? accent : muted
+          background: tag == "" ? alpha(accent, 0.18) : surface
+          padding: [8, 4]
+          radius: 4
+          maxLines: 1
+          onTap: tag = ""
+        }
+        for s in searches key s.l {
+          Text {
+            text: "${s.l} ${s.n}"
+            font: mono
+            fontSize: 10
+            color: tag == s.l ? accent : muted
+            background: tag == s.l ? alpha(accent, 0.18) : surface
+            padding: [8, 4]
+            radius: 4
+            maxLines: 1
+            onTap: tag = s.l
+          }
+        }
+      }
+      if error != null {
+        Text { text: stale ? "arXiv didn't answer: ${error}" : error; style: small; color: orange; maxLines: 2 }
+      }
+      Column {
+        weight: 1
+        scroll: true
+        lazy: true
+        gap: 2
+        onPull: { asked = now; refresh() }
+        for i in listed key i.id {
+          Column {
+            gap: 3
+            padding: [8, 7]
+            onTap: url("https://arxiv.org/abs/${i.id}")
+            Text { text: i.t; fontSize: 15; maxLines: 4 }
+            Text { text: join(i.a, ", "); fontSize: 11; color: muted; maxLines: 2 }
+            Text { text: i.s; fontSize: 12; color: muted; maxLines: 3 }
+            Row {
+              gap: 8
+              align: center
+              Text { text: "arXiv:${i.id}"; font: mono; fontSize: 10; color: muted; maxLines: 1 }
+              Text { text: i.c; font: mono; fontSize: 10; color: accent; maxLines: 1 }
+              Text { text: fmtAgo(i.p, now); font: mono; fontSize: 10; color: muted; maxLines: 1 }
+              if i.cm != "" {
+                Text { text: i.cm; font: mono; fontSize: 10; color: muted; weight: 1; maxLines: 1 }
+              }
+            }
+          }
+        }
+        if len(listed) == 0 {
+          Text { text: "nothing under this chip"; style: body; color: muted }
+        }
+      }
+      Row {
+        gap: 10
+        align: center
+        padding: [0, 8]
+        More { size: 11; centered: false }
+        Spacer { weight: 1 }
+        Text {
+          text: "open arXiv ↗"
+          font: mono
+          fontSize: 10
+          color: muted
+          maxLines: 1
+          onTap: url("https://arxiv.org/list/cs.SE/recent")
+        }
+      }
+    }
+  }
+}

@@ -43,6 +43,7 @@ It also carries the tools that make that true: `save.sh`, `restore.sh`, `drive.j
 | `bin/owl-mail` | `~/.local/bin/` — the Gmail CLI behind `20-mail.owl` |
 | `bin/owl-config` | `~/.local/bin/` — the backup/restore CLI behind the tiles and the app |
 | `bin/owl-usage` | `~/.local/bin/` — today's pi spend, read from pi's session logs, behind `40-pi-spend.owl` |
+| `bin/owl-papers` | `~/.local/bin/` — what's new on arXiv, behind `50-papers.owl` |
 | `bin/omarchy-sshd` | `/usr/local/bin/` — starts sshd on port 2222 for `sshd.owl` |
 | `drive.js`, `drive-backup.sh` | the Google Drive side of the backup |
 | `save.sh`, `restore.sh` | snapshot to git, and apply a snapshot |
@@ -180,6 +181,39 @@ and whether the last backup to Drive worked. Green at zero, yellow above it, red
 `pacman -Syu` in a terminal, Android opens the launcher's settings, config runs `save.sh`, and backup runs
 `owl-config save` (which also refreshes `status.json`). Requires `git`, `pacman` and `coreutils`.
 
+### `46-power.owl` — power
+Page 10, 8×4, with the repos tile: move it wherever it suits. The battery itself: the level in the theme's colour
+for it, **charging**, **full** or **on battery**, the watts going in or out, the time to full or, from the charge and the
+current, how long it has left, what the charger offers (a slow brick or cable shows), the temperature, the health and
+the cycles, and the level over the last hours as a sparkline scaled to what it did rather than to 0–100. Reads
+`android.battery` and `android.power` only, so it works with Linux closed; a tap opens Android's battery settings. No
+packages needed.
+
+### `47-repos.owl` — repos
+Page 5, 4×5, beside GitHub's inbox. Your own work rather than your notifications, one block per repository: a dot for
+where it stands, the name, **success**/**failure** and when, then what the newest run built (the commit or pull request
+title), its branch and how long it took. The **config** block on top is this setup's own git: what is changed but not
+saved, what is committed but not pushed, the last commit, and a tap to its `git status` in a terminal. **↻** or a pull
+in the screen asks again; a failed fetch keeps the last answer and says **offline**. The screen (tap the tile) has more
+per repository: the full `owner/name` (a tap opens the repository), the workflow, the branch, the duration, the run
+number and event, how many of the last five runs failed, the older runs with their own results — each opening the run —
+and the config's changed files by name. Which repositories is `~/.config/owl-repos/repos`, one per line as
+`owner/name` and, after a space, the name the tile shows it under (`gkapfham/curriculum-vitae cv`); without the file it
+watches the website and the CV. Each repository costs one `gh api` call every fifteen minutes. Requires `git`,
+`github-cli` and `jq`, and `gh` signed in on this system.
+
+### `50-papers.owl` — papers
+Page 9, 8×6. What's new on arXiv for software testing: the flaky tests, test generation, regression testing, mutation
+testing, test oracles, fault localization and program repair work, LLM agents at testing, and cs.SE's newest testing
+papers. `owl-papers` asks arXiv's own API for each search in `~/.config/owl-papers/queries`, newest first, and prints
+the newest of each as JSON. The tile's list scrolls, as the hacker news tile's does: each paper shows how long ago it
+came out, its first author and the search that found it, dotted while it's newer than the last time you opened the
+list; a swipe moves through them, a pull at the top asks arXiv again, **load 20 more** under the list asks for more, and
+the ↻ beside **papers** checks at once. The screen (tap the tile) has the same list wider — authors, a few lines of
+abstract, the arXiv id, the category and the paper's comment — with filter chips per search, **refresh** in its header
+or a pull, and **load 20 more** at its foot; a paper opens on arxiv.org. A failed fetch keeps the last list and says
+**offline**. Requires `python`.
+
 ### `backup.owl` — backup & restore app
 In the app drawer. The same backup/restore screen as the tiles, for when home is not showing. It is an OWL app, not part
 of the launcher APK.
@@ -285,6 +319,30 @@ limit=30
 
 ---
 
+## arXiv papers — `owl-papers`
+
+`50-papers.owl` reads arXiv through `owl-papers`, which asks arXiv's API directly: no account, no key, nothing to sign
+in to. The searches it runs live in `~/.config/owl-papers/queries`, one per line, `label: arXiv search`, and each
+label becomes a filter chip in the tile's screen; `max:` is how many papers the answer holds and `per:` how many each
+search asks for. Without that file it uses its own defaults (software testing, flaky tests, program repair, LLM agents,
+and cs.SE's newest testing work).
+
+```sh
+owl-papers                                  # the newest, in the terminal
+owl-papers 25                               # that many
+owl-papers json                             # what the widget reads
+owl-papers json --force                     # fetch again, past the five-minute cache
+owl-papers json --max 60                    # 60 papers, for "load 20 more" in the tile's screen
+owl-papers queries                          # what it watches
+```
+
+arXiv asks for one request every three seconds, so a fetch of five searches takes about fifteen; the answer is cached
+in `~/.cache/owl-papers/last.json`, which is also what the tile shows when arXiv can't be reached. `--max` asks for a
+longer list than `max:` in the queries file, and the cache is refetched whenever it holds fewer papers than were asked
+for, so growing the list is one command. Nothing personal is asked for, so the searches can be anyone's.
+
+---
+
 ## Dependencies
 
 Every widget declares what its commands need in `requires { pacman: [ … ] }`. The set for this setup:
@@ -292,7 +350,8 @@ Every widget declares what its commands need in `requires { pacman: [ … ] }`. 
 | package | used by |
 | --- | --- |
 | `btop` | quick settings' btop tile; the face's terminal use |
-| `python` | `owl-config` (backup/restore safety), `owl-usage` (the pi spend tile) |
+| `python` | `owl-config` (backup/restore safety), `owl-usage` (the pi spend tile), `owl-papers` (the papers tile) |
+| `git`, `github-cli`, `jq` | the repos tile: local git, `gh api` for Actions runs, `jq` to shape them |
 | `nodejs` | `owl-agenda`, `owl-mail`, `drive.js`, the Google Workspace skill |
 | `git` | `save.sh` commits, `owl-config`, the maintenance tile's config row |
 | `util-linux` | `setsid`, `flock` |

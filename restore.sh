@@ -68,6 +68,16 @@ if [ -f bin/owl-usage ]; then
   cp -p bin/owl-usage "$HOME"/.local/bin/
   chmod +x "$HOME"/.local/bin/owl-usage
 fi
+if [ -f bin/owl-papers ]; then
+  mkdir -p "$HOME"/.local/bin
+  cp -p bin/owl-papers "$HOME"/.local/bin/
+  chmod +x "$HOME"/.local/bin/owl-papers
+fi
+# The searches the papers tile watches; without them owl-papers falls back to its own defaults.
+if [ -f omalauncher/papers/queries ]; then
+  mkdir -p "$HOME"/.config/owl-papers
+  cp -p omalauncher/papers/queries "$HOME"/.config/owl-papers/queries
+fi
 # The sshd tile runs this; it belongs in /usr/local/bin, not the home.
 if [ -f bin/omarchy-sshd ]; then
   cp -p bin/omarchy-sshd /usr/local/bin/omarchy-sshd

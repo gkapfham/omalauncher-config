@@ -35,7 +35,7 @@ widget "backup" {
   let staleAfter = st != null && st.state == "restoring" ? 1800 : 600
   let stalled = busy && age > staleAfter
   let working = busy && !stalled
-  let stateText = st == null ? "ready" : stalled ? "interrupted" : st.state
+  let stateText = st == null ? "ready" : stalled ? "stopped" : st.state
   let stateColor = st == null ? muted : st.state == "error" ? red : st.state == "ok" ? green : yellow
   let last = len(bl ?? []) > 0 ? bl[0] : null
   let inside = cs != null && cs.id == viewing ? cs : null
@@ -47,7 +47,6 @@ widget "backup" {
     : stalled ? "the last " + (st.state == "restoring" ? "restore" : "backup") + " stopped before it finished; that status isn't live any more"
     : st.message
   // The tile shows as much as it has room for, so it keeps working when it's resized.
-  let roomy = (tileHeight ?? 0) >= 230
   let tall = (tileHeight ?? 0) >= 175
   let earlierFit = clamp(floor(((tileHeight ?? 0) - 175) / 28), 0, 6)
   // Trouble gets the line "when · size" would take, so nothing is squeezed out.
@@ -70,7 +69,7 @@ widget "backup" {
     fill: true
     gap: 3
     Row {
-      Text { text: "backup"; style: muted; weight: 1 }
+      Text { text: "backup"; style: muted; weight: 1; maxLines: 1 }
       Text { text: stateText; style: small; color: stateColor }
     }
     if last != null {
@@ -89,10 +88,10 @@ widget "backup" {
     } else {
       Text { text: "no backups yet"; style: small; color: muted }
     }
-    if trouble {
+    if trouble && tall {
       Text { text: troubleText; style: small; color: stateColor; maxLines: 2 }
     }
-    if roomy && kept > 0 {
+    if tall && !trouble && kept > 0 {
       Text { text: "${kept} saved · " + fmtBytes(bytesKept); style: small; color: muted; maxLines: 1 }
     }
     if tall && earlierFit > 0 && kept > 1 {

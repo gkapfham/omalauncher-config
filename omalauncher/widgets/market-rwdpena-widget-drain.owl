@@ -1,11 +1,11 @@
 widget "widget drain" {
   size: 3x5
-  minSize: 3x3
+  minSize: 4x4
   requires { pacman: ["python"] }
   meta {
     owl: 9
-    description: "Estimated battery drain per widget via owl-usage: animation, commands, network, and terminals. Tap to inspect the model and benchmark commands"
-    version: "1.5"
+    description: "Estimated battery drain of every widget, panel and app in this folder, worst first, via owl-usage: frames, commands, network, terminals. Tap for the model, each file's notes, and command benchmarks"
+    version: "1.9"
     license: "MIT"
     category: "system"
   }
@@ -16,10 +16,14 @@ widget "widget drain" {
   source now = clock every 1m
 
   let list = data == null ? [] : (data.widgets ?? [])
-  let maxItems = rows != null ? clamp((rows - 1) * 2, 3, 10) : 8
-  let top = take(list, maxItems)
   let count = count(list)
   let biggest = count > 0 ? list[0].mah : 1
+  // Every file gets a cell: two columns in a tall tile, fewer rows in a short one.
+  // Keep the header and cell heights in step with the cells below, so nothing is cut off.
+  let tileH = tileHeight ?? 480
+  let rowsFit = clamp(floor((tileH - 56) / 30), 1, 40)
+  let shown = take(list, rowsFit * 2)
+  let hidden = count - count(shown)
   let total = data == null ? null : data.totalMahPerDay
   let totalPct = data == null ? null : data.totalPctPerDay
   let generated = data == null ? null : data.generated
@@ -39,7 +43,7 @@ widget "widget drain" {
 
   // Install the bundled owl-usage analyzer into ~/.cache/owl-usage/owl-usage.py
   // on first run (or version bump) and compute initial estimates immediately.
-  when (data.scriptVersion ?? "") != "1.5" {
+  when (data.scriptVersion ?? "") != "1.8" {
     run("""mkdir -p ~/.cache/owl-usage
 cat > ~/.cache/owl-usage/owl-usage.py.tmp <<'OWL_USAGE_PY'
 #!/usr/bin/env python3
@@ -52,7 +56,10 @@ what each widget declares, plus everything that can be measured:
   * its sources (kind and interval), streams, triggers and nodes, from the file;
   * the CPU time of its commands, measured by --measure (cached, see below);
   * the frame time and half-rate warnings the launcher itself wrote in
-    .errors/<file>.txt (a widget that draws above ~4 ms per frame says so).
+    .errors/<file>.txt (a widget that draws above ~4 ms per frame says so);
+  * whether it only animates after a tap, or only in its screen, or its panel
+    is only open for a few minutes a day, so a still widget isn't charged for
+    frames it never draws.
 
 Output: ~/.cache/owl-usage/costs.json (read by the "widget drain" widget) and a
 table on stdout. Every constant of the model is in MODEL, below, and is printed
@@ -84,6 +91,8 @@ WIDGETS = os.path.expanduser(
 CACHE = os.path.expanduser(os.environ.get("OWL_USAGE_CACHE", "~/.cache/owl-usage"))
 COSTS = os.path.join(CACHE, "costs.json")
 TIMINGS = os.path.join(CACHE, "timings.json")
+STYLE = os.path.expanduser(
+    os.environ.get("OWL_STYLE", "~/.config/omalauncher/style/style.toml"))
 
 # --- the model -----------------------------------------------------------------
 # A phone lies around 3.85 V, so 1 mAh is 13.86 J. Everything below is energy
@@ -107,6 +116,12 @@ MODEL = {
     "terminalHz": 2.0,        # its own repaints (btop, a shell prompt)
     "terminalFrameMs": 1.5,
     "imageMj": 900.0,         # downloading an image from the web (once a day)
+    # A panel picked for a gesture is kept live so it opens at once: its sources poll
+    # all day, but it only draws (and animates) the few minutes it is actually open.
+    "panelOpen": 3.0 / 1440.0,
+    # A widget that only animates for a while after a tap (its `time` reads are
+    # behind a state that starts false) is still the rest of the day: a few taps.
+    "tapAnim": 3.0 / 1440.0,
     "phoneMah": float(os.environ.get("OWL_PHONE_MAH", 5000)),  # the phone's battery
     "batteryV": 3.85,
 }
@@ -157,6 +172,53 @@ def human_seconds(s):
     if s % 60 == 0:
         return "%dm" % (s // 60)
     return "%ds" % s
+
+
+def gestures():
+    '''What each swipe opens, from style.toml: {"up": file or None, "down": file or None}.
+
+    The launcher only keeps a panel live if a gesture opens it (or it is the drawer
+    the prompt bar opens), so a panel nothing opens runs not at all.'''
+    up, down = "drawer.owl", None
+    try:
+        with open(STYLE, encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError:
+        return {"up": up, "down": down}
+    section = None
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        m = re.match(r"\[([^\]]+)\]", line)
+        if m:
+            section = m.group(1).strip()
+            continue
+        if section != "gestures":
+            continue
+        m = re.match(r'(swipe-up|swipe-down)\s*=\s*"([^"]*)"', line)
+        if m:
+            if m.group(1) == "swipe-up":
+                up = m.group(2)
+            else:
+                down = m.group(2)
+
+    def panel(v):
+        v = os.path.basename(v.strip()) if v else ""
+        return None if v in ("", "none") else v
+
+    return {"up": panel(up), "down": panel(down)}
+
+
+def live_panels():
+    '''The panel files the launcher keeps running: the drawer and the swipe-down one.'''
+    g = gestures()
+    up = g["up"]
+    # The drawer falls back to drawer.owl, then the stock one, when what's picked is gone.
+    if not up or not os.path.exists(os.path.join(WIDGETS, up)):
+        up = next((p for p in ("drawer.owl", ".stock-drawer.owl")
+                   if os.path.exists(os.path.join(WIDGETS, p))), None)
+    return {p for p in (up, g["down"]) if p}
 
 
 def strip_comments(text):
@@ -334,36 +396,103 @@ def read_errors(path):
     return out
 
 
+def tap_gated(masked):
+    '''The state that a widget's animation `time` reads are behind, when that
+    state starts false and a tap sets it true: the widget is still until tapped.
+    Only `state x = false` counts, and each `time` outside a tap handler must be
+    tested by it, on its line (`x ? ...`, `when (x ...)` or `if x ...`) or in a
+    block such a line opened. Returns its name, or None; a `time` whose gate
+    this can't see keeps the usual cost.'''
+    if not ANIM_RE.search(masked):
+        return None
+    ranges, taps = [], []
+    for m in re.finditer(r"\bonTap\s*:", masked):
+        i = masked.find("{", m.end())
+        if i < 0:
+            continue
+        depth = 0
+        for j in range(i, len(masked)):
+            if masked[j] == "{":
+                depth += 1
+            elif masked[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    ranges.append((i, j + 1))
+                    taps.append(masked[i:j + 1])
+                    break
+    # `time` read by the tap itself (to wake the animation) is a one-off, not a frame.
+    times = [m for m in ANIM_RE.finditer(masked)
+             if not any(a <= m.start() < b for a, b in ranges)]
+    taps = " ".join(taps)
+
+    def gated(pos, gate):
+        '''True when the line at pos, or a block it sits in, tests the gate.'''
+        line = masked[:pos].split("\n")[-1] + masked[pos:].split("\n")[0]
+        if gate.search(line):
+            return True
+        stack = []
+        for i, ch in enumerate(masked[:pos]):
+            if ch == "{":
+                stack.append(masked[masked.rfind("\n", 0, i) + 1:i])
+            elif ch == "}" and stack:
+                stack.pop()
+        return any(gate.search(h) for h in stack)
+
+    for name in re.findall(r"\bstate\s+(\w+)\s*=\s*false\b", masked):
+        if not re.search(r"\b%s\s*=\s*true\b" % name, taps):
+            continue
+        gate = re.compile(r"(?:\b%s\s*\?|\b(?:when|if)\s*\(\s*%s\b|\b(?:when|if)\s+%s\b)"
+                          % (name, name, name))
+        if all(gated(m.start(), gate) for m in times):
+            return name
+    return None
+
+
+def screen_only(masked):
+    '''True when every animation `time` read sits inside the widget's `screen`,
+    which only draws while it is open: the tile itself never animates.'''
+    ranges = []
+    for m in re.finditer(r"\bscreen\s*\{", masked):
+        i = m.end() - 1
+        depth = 0
+        for j in range(i, len(masked)):
+            if masked[j] == "{":
+                depth += 1
+            elif masked[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    ranges.append((i, j + 1))
+                    break
+    times = list(ANIM_RE.finditer(masked))
+    return bool(times) and all(any(a <= t.start() < b for a, b in ranges) for t in times)
+
+
 def parse_widget(path):
     '''Everything about one .owl file that decides what it costs.'''
     with open(path, encoding="utf-8", errors="replace") as fh:
         raw = fh.read()
     text = strip_comments(raw)
-    # Everything lives inside the widget's (or app's) outer braces; scan that
-    # body, so `source`, `every`, `state` and `Terminal` sit at depth 0 while
-    # the node trees they feed don't.
-    m = re.search(r'\b(widget|app)\s+"[^"]*"\s*\{', text)
+    # Everything lives inside the file's outer braces (`widget`, `app`, `panel`,
+    # `keybar` or `face`); scan that body, so `source`, `every`, `state` and
+    # `Terminal` sit at depth 0 while the node trees they feed don't.
+    m = re.search(r'\b(widget|app|panel|keybar|face)\s+"[^"]*"\s*\{', text)
     body = text[m.end():].rsplit("}", 1)[0] if m else text
     masked = blank_strings(body)
+    kind = m.group(1) if m else "widget"
     w = {"file": os.path.basename(path), "path": path,
          "masked": masked,
          "name": re.sub(r"^\d+-", "", re.sub(r"\.owl$", "", os.path.basename(path))),
          "sources": [], "triggers": [], "terminal": [],
-         "page": None, "size": None, "kind": "widget"}
+         "page": None, "size": None, "kind": kind, "live": True}
     m = re.search(r'size:\s*"?(\d+x\d+)"?', text)
     if m:
         w["size"] = m.group(1)
     m = re.search(r"page:\s*(\d+)", text)
     if m:
         w["page"] = int(m.group(1))
-    m = re.search(r'^\s*app\s+"([^"]*)"', text, re.M)
+    m = re.search(r'^\s*%s\s+"([^"]*)"' % kind, text, re.M)
     if m:
-        w["kind"] = "app"
         w["name"] = m.group(1)
-    else:
-        m = re.search(r'^\s*widget\s+"([^"]*)"', text, re.M)
-        if m:
-            w["name"] = m.group(1)
 
     for line, stmt in statements(body):
         head = stmt.split("(", 1)[0]
@@ -418,6 +547,8 @@ def parse_widget(path):
     w["images"] = len(re.findall(r"\bImage\s*\{", masked))
     w["webImages"] = len(re.findall(r"Image\s*\{[^}]*https?://", text, re.S))
     w["animates"] = bool(ANIM_RE.search(masked))
+    w["tapGate"] = tap_gated(masked)
+    w["screenAnim"] = screen_only(masked)
     w["errors"] = read_errors(path)
     return w
 
@@ -479,6 +610,8 @@ def measure_all(widgets, timings, force=False):
     '''Time every cmd/stream command once. Cache: 30 days, or 7 for streams.'''
     todo = {}
     for w in widgets:
+        if not w["live"]:
+            continue                       # a panel nothing opens never runs its commands
         for s in w["sources"]:
             if not s["command"]:
                 continue
@@ -521,9 +654,36 @@ def cost(w, timings):
     '''Break a widget's day into parts, in mAh.'''
     parts = {k: 0.0 for k in PART_LABELS}
     notes, wakes, measured = [], 0.0, False
-    vis = MODEL["visible"]
     frame_ms = estimate_frame_ms(w)
     hz = MODEL["frameHz"] / 2 if w["errors"]["halfRate"] else MODEL["frameHz"]
+    # A panel nothing opens never runs: the launcher only keeps the drawer and the
+    # swipe-down panel live (WidgetEngine.gesturePanels), so nothing to estimate.
+    if w["kind"] == "panel" and not w["live"]:
+        g = gestures()
+        why = "swipe-down is " + (g["down"] or "none")
+        if g["up"] and g["up"] != w["file"]:
+            why += ", swipe-up opens " + g["up"]
+        notes.append("panel not opened by a gesture (%s): it never runs, so it costs nothing" % why)
+        return parts, notes, wakes, measured, frame_ms, hz
+    if w["kind"] == "keybar" and not w["live"]:
+        notes.append("keybar: only runs while a terminal shows, so its drain is left out")
+        return parts, notes, wakes, measured, frame_ms, hz
+    # A panel picked for a gesture stays live, so its sources poll all day, but it
+    # only draws (and animates) the minutes it is open. Widgets live while their
+    # page is on screen or next to it.
+    panel = w["kind"] == "panel"
+    vis = 1.0 if panel else MODEL["visible"]
+    anim_vis = MODEL["panelOpen"] if panel else vis
+    if panel:
+        notes.append("panel: sources poll while picked, but it only draws while open (assumed %.0f min/day)"
+                     % (MODEL["panelOpen"] * 1440))
+    # A widget that sleeps until tapped draws nothing the rest of the day: count
+    # the few minutes it is awake, not every minute its page shows.
+    tap = w.get("tapGate")
+    if tap:
+        anim_vis = MODEL["tapAnim"]
+    elif w.get("screenAnim"):
+        anim_vis = MODEL["panelOpen"]
     redraw_mj = frame_ms / 1000.0 * MODEL["framePowerW"] * 1000.0 * MODEL["partialRedraw"]
 
     for s in w["sources"]:
@@ -563,7 +723,7 @@ def cost(w, timings):
     # animation: while the page is live, a widget that reads `time` redraws at
     # the display rate (half of it when the launcher said the tile is slow)
     if w["animates"]:
-        frames = 86400.0 * vis * hz
+        frames = 86400.0 * anim_vis * hz
         parts["frames"] += mah(frames * frame_ms / 1000.0 * MODEL["framePowerW"] * 1000.0)
 
     # triggers
@@ -610,9 +770,19 @@ def cost(w, timings):
     else:
         notes.append("estimated draw: %.1f ms/frame" % frame_ms)
     if w["animates"]:
-        anim = "animates whenever page is on screen (%d Hz)" % hz
-        if re.search(r"\bif\b", w.get("masked", "")):
-            anim += "; `time` inside a false `if` costs nothing"
+        if tap:
+            anim = ("animates only while awake after a tap (assumed %.0f min/day, %d Hz)"
+                    % (MODEL["tapAnim"] * 1440, hz))
+            anim += "; `time` is read behind state `%s`, false until tapped" % tap
+        elif w.get("screenAnim"):
+            anim = ("animates only while its screen is open (assumed %.0f min/day, %d Hz)"
+                    % (MODEL["panelOpen"] * 1440, hz))
+            anim += "; the tile itself never reads `time`"
+        else:
+            anim = ("animates only while the panel is open (%d Hz)" if panel
+                    else "animates whenever page is on screen (%d Hz)") % hz
+            if re.search(r"\bif\b", w.get("masked", "")):
+                anim += "; `time` inside a false `if` costs nothing"
         notes.append(anim)
     if e["timeouts"]:
         notes.append("slow command: " + ", ".join(e["timeouts"]))
@@ -640,6 +810,12 @@ def analyse():
             widgets.append(parse_widget(os.path.join(WIDGETS, name)))
         except Exception as exc:                       # never fail on one file
             print("owl-usage: %s: %s" % (name, exc), file=sys.stderr)
+    live = live_panels()
+    for w in widgets:
+        if w["kind"] == "panel":
+            w["live"] = w["file"] in live
+        elif w["kind"] == "keybar":
+            w["live"] = False                  # only while a terminal shows
     return widgets
 
 
@@ -669,8 +845,9 @@ def build(widgets, timings):
                     for k, v in top_parts[:3] if v > 0],
             "topText": " · ".join("%s %s" % (PART_LABELS[k], round(v, 1))
                                   for k, v in top_parts[:3] if v > 0),
-            "frameMs": round(frame_ms, 2), "hz": hz,
+            "frameMs": round(frame_ms, 2), "hz": hz, "live": w["live"],
             "nodes": w["nodes"], "animates": w["animates"],
+            "tapGate": w["tapGate"], "screenAnim": w["screenAnim"],
             "terminal": bool(w["terminal"]), "measured": measured,
             "wakes": int(wakes),
             "sources": [{"name": s["name"], "kind": s["kind"],
@@ -687,7 +864,7 @@ def build(widgets, timings):
         r["pct"] = round(r["mah"] / MODEL["phoneMah"] * 100, 2)
     return {
         "version": 1,
-        "scriptVersion": "1.5",
+        "scriptVersion": "1.8",
         "generated": int(time.time()),
         "dir": WIDGETS,
         "model": {k: v for k, v in MODEL.items()},
@@ -764,10 +941,15 @@ python3 ~/.cache/owl-usage/owl-usage.py --quiet --quick""")
   // --quick never runs a widget's commands: that only happens on "measure".
   every 10m { run("python3 ~/.cache/owl-usage/owl-usage.py --quiet --quick") }
 
-  onTap: screen()
+  // Recalculate as it opens, so a widget added a moment ago is already in the list;
+  // the `every 10m` trigger below keeps it fresh while this page is on screen.
+  onTap: {
+    run("python3 ~/.cache/owl-usage/owl-usage.py --quiet --quick")
+    screen()
+  }
 
   Column {
-    gap: 6
+    gap: 4
     Row {
       align: center
       Text { text: "widget drain"; style: muted; weight: 1; maxLines: 1 }
@@ -776,8 +958,9 @@ python3 ~/.cache/owl-usage/owl-usage.py --quiet --quick""")
           text: "${totalPct}%/d"
           fontSize: 11
           color: totalPct > 20 ? red : totalPct > 10 ? orange : green
-          width: 48
+          width: 58
           align: end
+          maxLines: 1
         }
       }
     }
@@ -785,30 +968,46 @@ python3 ~/.cache/owl-usage/owl-usage.py --quiet --quick""")
     if total == null {
       Text { text: "tap to analyze"; style: small; color: muted }
     } else {
-      Text { text: "${round(total)} mAh/day · ${count} widgets"; style: small; color: muted; maxLines: 1 }
+      Text {
+        text: "${round(total)} mAh/day · ${count} files${hidden > 0 ? ' · tap for all' : ''}"
+        style: small; color: muted; maxLines: 1
+      }
     }
 
     if count == 0 {
       Text { text: "no data yet"; style: small }
       Button { text: "analyze now"; onTap: run("python3 ~/.cache/owl-usage/owl-usage.py --quiet --quick") }
     } else {
-      for w in top key w.file {
-        Column {
-          gap: 2
-          Row {
-            align: center
-            Text { text: w.name; fontSize: 12; weight: 1; maxLines: 1 }
-            Text {
-              text: "${round(w.mah)} mAh"
-              fontSize: 11
-              color: w.mah >= 100 ? red : w.mah >= 40 ? orange : muted
-              width: 58
-              align: end
+      // one compact cell per file, worst first: name, mAh/day, and its bar
+      Grid {
+        columns: 2
+        gap: 6
+        for w in shown key w.file {
+          Column {
+            gap: 1
+            padding: [0, 0, 10, 0]
+            Row {
+              gap: 4
+              align: center
+              Text {
+                text: w.name
+                fontSize: 11
+                weight: 1
+                maxLines: 1
+                color: w.mah < 0.5 ? muted : foreground
+              }
+              Text {
+                text: w.mah >= 10 ? "${round(w.mah)}" : "${round(w.mah, 1)}"
+                fontSize: 11
+                width: 30
+                align: end
+                color: w.mah >= 100 ? red : w.mah >= 40 ? orange : muted
+              }
             }
-          }
-          Progress {
-            value: w.mah; max: biggest; height: 3; fill: width
-            color: w.mah >= 100 ? red : w.mah >= 40 ? orange : green
+            Progress {
+              value: w.mah; max: biggest; height: 3; fill: width
+              color: w.mah >= 100 ? red : w.mah >= 40 ? orange : green
+            }
           }
         }
       }
@@ -893,7 +1092,7 @@ python3 ~/.cache/owl-usage/owl-usage.py --quiet --quick""")
           Row {
             gap: 4
             Text {
-              text: "${w.kind == 'app' ? 'app' : 'p' + str(w.page ?? '?')} · ${w.size ?? 'full'} · ${count(w.sources)} src · ${fmtNum(w.wakes, {compact: true})} wakes"
+              text: "${w.kind == 'app' ? 'app' : w.kind == 'panel' ? (w.live ? 'panel' : 'panel off') : w.kind == 'keybar' ? 'keybar' : 'p' + str(w.page ?? '?')} · ${w.size ?? 'full'} · ${count(w.sources)} src · ${fmtNum(w.wakes, {compact: true})} wakes${w.tapGate != null ? ' · sleeps until tapped' : ''}"
               style: small; color: muted; weight: 1; maxLines: 1
             }
             Text {
@@ -927,7 +1126,7 @@ python3 ~/.cache/owl-usage/owl-usage.py --quiet --quick""")
         Button { text: "close"; onTap: close() }
       }
       Text {
-        text: "green < 40 · orange < 100 · red ≥ 100 mAh/day. Red on an animating widget means it redraws at 60 Hz whenever on screen; a live terminal costs ~86 mAh/day just by staying alive."
+        text: "green < 40 · orange < 100 · red ≥ 100 mAh/day. Red on an animating widget means it redraws at 60 Hz whenever on screen (unless it sleeps until tapped); a live terminal costs ~86 mAh/day just by staying alive."
         style: small; color: muted
       }
     }

@@ -5,6 +5,9 @@
 # A widget file left out stays where it is, and a new one goes by its own page:, order: and size:;
 # an app left out comes off home. An app is a package, "pkg/activity" (with "@profile" for a work
 # profile's), "linux:<desktop id>" or "owl:<file>".
+# A foldable's cover screen has pages of its own under [cover], as [[cover.page]]; without them it
+# starts from the pages above. With home.unfolded-layout, a Fold's inner screen has its own under
+# [unfolded] (its columns home.unfolded-columns), starting from the pages above side by side.
 # What couldn't be read is in errors.txt next to this file.
 version = 1
 columns = 8
@@ -33,15 +36,26 @@ tiles = [
 
 [[page]]
 tiles = [
-  { widget = "40-pi-spend.owl", x = 0, y = 0, w = 8, h = 6 },
-  { widget = "market-weebowiz-dev-logs.owl", x = 0, y = 6, w = 8, h = 5 },
-  { widget = "market-simonschubert-github.owl", x = 0, y = 11, w = 8, h = 5 },
+  { widget = "market-simonschubert-hacker-news.owl", x = 0, y = 0, w = 8, h = 16 },
 ]
 
 [[page]]
 tiles = [
-  { widget = "market-simonschubert-hacker-news.owl", x = 0, y = 0, w = 8, h = 10 },
-  { widget = "market-rwdpena-widget-drain.owl", x = 0, y = 10, w = 8, h = 6 },
+  { widget = "50-papers.owl", x = 0, y = 0, w = 8, h = 16 },
+]
+
+[[page]]
+tiles = [
+  { widget = "40-pi-spend.owl", x = 0, y = 0, w = 8, h = 6 },
+  { widget = "market-weebowiz-dev-logs.owl", x = 0, y = 6, w = 8, h = 5 },
+  { widget = "market-simonschubert-github.owl", x = 0, y = 11, w = 4, h = 5 },
+  { widget = "47-repos.owl", x = 4, y = 11, w = 4, h = 5 },
+]
+
+[[page]]
+tiles = [
+  { widget = "46-power.owl", x = 0, y = 0, w = 8, h = 6 },
+  { widget = "market-rwdpena-widget-drain.owl", x = 0, y = 6, w = 8, h = 10 },
 ]
 
 [[page]]

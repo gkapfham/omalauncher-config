@@ -1,0 +1,22 @@
+# What the papers tile watches: one arXiv search per line, `label: search`. The label is what the tile's
+# filter chips say, so keep it one word where you can. `max:` is how many the tile gets in all, `per:` how
+# many each search asks arXiv for. Searches are what arxiv.org's own search field takes: ti:"a phrase" for
+# titles, abs:"a phrase" for abstracts, cat:cs.SE for a category, AND, OR and parentheses between them.
+
+# The flaky tests I write and talk about.
+flaky: ti:"flaky" OR abs:"flaky test" OR abs:"test flakiness"
+
+# Software testing itself: generation, regression, suites, mutation, oracles.
+testing: ti:"software testing" OR ti:"test generation" OR ti:"regression testing" OR ti:"test suite" OR ti:"mutation testing" OR ti:"test oracle"
+
+# Finding and fixing faults.
+repair: ti:"fault localization" OR ti:"program repair" OR ti:"automated repair"
+
+# LLM agents at testing and verification.
+agents: ti:"LLM" AND (ti:"test" OR ti:"testing" OR ti:"verification")
+
+# The newest testing work in software engineering, so there is always something from today.
+recent: cat:cs.SE AND abs:"test"
+
+max: 40
+per: 10
